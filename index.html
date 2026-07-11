@@ -3,26 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAFEGIS - Sembalun Agricultural Protection</title>
+    <title>SAFEGIS - Sembalun Smart Land Protection</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; overflow: hidden; background-color: #0f172a; }
         #map { width: 100%; height: 100%; z-index: 10; }
         
         .glass-panel {
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(200, 200, 200, 0.3);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
-        /* Custom scrollbar for sidebar */
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom scrollbar */
         .sidebar-scroll::-webkit-scrollbar { width: 6px; }
-        .sidebar-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
         /* Map custom markers */
         .custom-marker {
@@ -31,121 +40,333 @@
             justify-content: center;
             border-radius: 50%;
             color: white;
-            font-weight: bold;
+            font-size: 14px;
             border: 2px solid white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transition: transform 0.3s ease;
         }
+        .custom-marker:hover { transform: scale(1.2); }
         
         .cursor-crosshair { cursor: crosshair !important; }
+
+        /* Animation for AI Scan */
+        @keyframes scanline {
+            0% { top: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .ai-scan-effect {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: #10b981;
+            box-shadow: 0 0 15px 2px #10b981;
+            z-index: 999;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* AI Bounding Box Styles for Computer Vision Simulation */
+        .ai-bounding-box {
+            border: 2px solid #10b981;
+            position: relative;
+            background: rgba(16, 185, 129, 0.15);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4) inset;
+            pointer-events: none;
+            animation: pulse-box 1.5s infinite;
+        }
+        .ai-bounding-box.building {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.15);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4) inset;
+        }
+        .ai-bounding-box.kebun {
+            border-color: #84cc16;
+            background: rgba(132, 204, 22, 0.15);
+            box-shadow: 0 0 15px rgba(132, 204, 22, 0.4) inset;
+        }
+        .ai-bounding-box.permukiman {
+            border-color: #94a3b8;
+            background: rgba(148, 163, 184, 0.15);
+            box-shadow: 0 0 15px rgba(148, 163, 184, 0.4) inset;
+        }
+        .ai-label {
+            position: absolute;
+            top: -22px;
+            left: -2px;
+            background: #10b981;
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 8px;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+            border-radius: 2px 2px 0 0;
+            font-family: monospace;
+        }
+        .ai-bounding-box.building .ai-label {
+            background: #3b82f6;
+            color: white;
+        }
+        .ai-bounding-box.kebun .ai-label {
+            background: #84cc16;
+            color: #0f172a;
+        }
+        .ai-bounding-box.permukiman .ai-label {
+            background: #94a3b8;
+            color: white;
+        }
+        @keyframes pulse-box {
+            0% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 0.6; transform: scale(1); }
+        }
+
+        /* Modal Scenario */
+        .modal-active { display: flex !important; }
     </style>
 </head>
-<body class="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-800">
+<body class="flex flex-col md:flex-row h-screen text-slate-800">
+
+    <!-- AI Scanning Line Overlay -->
+    <div id="scan-line" class="ai-scan-effect"></div>
 
     <!-- Sidebar -->
-    <aside class="w-full md:w-80 h-1/3 md:h-full glass-panel flex flex-col z-20 relative shadow-xl">
-        <div class="p-5 border-b border-slate-200 bg-emerald-700 text-white flex items-center gap-3">
-            <i data-lucide="map" class="w-8 h-8"></i>
-            <div>
-                <h1 class="font-bold text-xl tracking-wide">SAFEGIS</h1>
-                <p class="text-xs text-emerald-100">Sistem Pelindung Sawah Sembalun</p>
+    <aside class="w-full md:w-96 h-1/2 md:h-full glass-panel flex flex-col z-20 relative shadow-2xl">
+        <!-- Header -->
+        <div class="p-5 bg-gradient-to-r from-emerald-800 to-teal-700 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i data-lucide="satellite" class="w-8 h-8 text-emerald-300"></i>
+                <div>
+                    <h1 class="font-bold text-2xl tracking-wide leading-tight">SAFEGIS</h1>
+                    <p class="text-xs text-emerald-200 font-medium tracking-wide uppercase">AI Land Protection System</p>
+                </div>
+            </div>
+            <div class="bg-emerald-900 px-2 py-1 rounded text-xs animate-pulse border border-emerald-500">
+                LIVE
             </div>
         </div>
 
         <div class="flex-1 overflow-y-auto sidebar-scroll p-5 space-y-6">
             
-            <!-- Filter Layers -->
+            <!-- Feature 1: Time Series / Land Monitoring -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4 text-emerald-600"></i> 1. AI Land Monitoring
+                </h2>
+                <p class="text-xs text-slate-500 mb-4">Geser tahun untuk melihat AI mendeteksi perubahan lahan (Sawah menjadi Bangunan) dari citra Google Maps.</p>
+                
+                <div class="relative px-2">
+                    <input type="range" id="year-slider" min="2020" max="2026" step="3" value="2020" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                    <div class="flex justify-between text-xs font-bold text-slate-600 mt-2">
+                        <span>2020</span>
+                        <span>2023</span>
+                        <span>2026</span>
+                    </div>
+                </div>
+                <div class="mt-3 p-2 bg-emerald-100 rounded text-center flex justify-between items-center">
+                    <span class="text-xs text-emerald-800 font-semibold">Tahun Aktif: <span id="year-display" class="text-lg font-bold">2020</span></span>
+                </div>
+                
+                <!-- NEW AI SCAN BUTTON -->
+                <button id="btn-ai-scan" class="mt-4 w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg shadow-md transition flex justify-center items-center gap-2 text-sm border border-slate-700">
+                    <i data-lucide="scan" class="w-4 h-4 text-emerald-400"></i> Jalankan Simulasi Scan AI
+                </button>
+            </div>
+
+            <!-- Feature 2: POI Layers -->
             <div>
-                <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4"></i> Peta Lokasi
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i> Deteksi Objek AI
                 </h2>
                 <div class="grid grid-cols-2 gap-2" id="layer-toggles">
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
                         <input type="checkbox" value="Sawah" checked class="accent-emerald-600 w-4 h-4"> 🌾 Sawah
                     </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Villa" checked class="accent-emerald-600 w-4 h-4"> 🏡 Villa
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
+                        <input type="checkbox" value="Kebun" checked class="accent-lime-500 w-4 h-4"> 🌴 Kebun
                     </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Homestay" checked class="accent-emerald-600 w-4 h-4"> 🏠 Homestay
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
+                        <input type="checkbox" value="Permukiman" checked class="accent-slate-500 w-4 h-4"> 🏘️ Permukiman
                     </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Glamping" checked class="accent-emerald-600 w-4 h-4"> 🏕️ Glamping
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
+                        <input type="checkbox" value="Hutan" checked class="accent-green-800 w-4 h-4"> 🌲 Hutan
                     </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Kafe" checked class="accent-emerald-600 w-4 h-4"> ☕ Kafe
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
+                        <input type="checkbox" value="Villa" checked class="accent-blue-500 w-4 h-4"> 🏡 Villa
                     </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Jalan" checked class="accent-emerald-600 w-4 h-4"> 🛣️ Jalan
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition">
-                        <input type="checkbox" value="Wisata" checked class="accent-emerald-600 w-4 h-4"> 🏔️ Wisata
+                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
+                        <input type="checkbox" value="Wisata" checked class="accent-cyan-500 w-4 h-4"> 🏔️ Wisata
                     </label>
                 </div>
             </div>
 
-            <hr class="border-slate-200">
-
-            <!-- Analisis Perubahan -->
+            <!-- Feature 3: Risk Assessment -->
             <div>
-                <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i data-lucide="satellite" class="w-4 h-4"></i> Analisis Satelit
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-emerald-600"></i> 2. Risk Assessment
                 </h2>
-                <div class="space-y-2">
-                    <button id="btn-detect" class="w-full text-left flex items-center gap-3 bg-white border border-rose-200 hover:border-rose-400 hover:bg-rose-50 p-3 rounded-lg shadow-sm transition">
-                        <div class="bg-rose-100 text-rose-600 p-2 rounded-md"><i data-lucide="history" class="w-5 h-5"></i></div>
-                        <div>
-                            <div class="font-medium text-sm text-slate-700">Alih Fungsi Sawah</div>
-                            <div class="text-xs text-slate-500">Bandingkan 2020 vs 2025</div>
-                        </div>
-                    </button>
-                    
-                    <button id="btn-predict" class="w-full text-left flex items-center gap-3 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 p-3 rounded-lg shadow-sm transition">
-                        <div class="bg-amber-100 text-amber-600 p-2 rounded-md"><i data-lucide="cpu" class="w-5 h-5"></i></div>
-                        <div>
-                            <div class="font-medium text-sm text-slate-700">Prediksi Risiko AI</div>
-                            <div class="text-xs text-slate-500">Sawah berisiko tergusur</div>
-                        </div>
-                    </button>
-
-                    <button id="btn-reset" class="w-full text-center text-sm text-slate-500 hover:text-slate-800 py-2 hidden">
-                        ↺ Reset Peta ke Kondisi Normal
-                    </button>
-                </div>
-            </div>
-
-            <hr class="border-slate-200">
-
-            <!-- Zonasi -->
-            <div>
-                <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i data-lucide="building" class="w-4 h-4"></i> Simulasi Investor
-                </h2>
-                <p class="text-xs text-slate-500 mb-3">Mau bangun properti? Cek lokasinya dulu agar tidak merusak sawah.</p>
-                <button id="btn-zoning" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2">
-                    <i data-lucide="map-pin" class="w-4 h-4"></i> Aktifkan Mode Pengecekan
+                <button id="btn-risk" class="w-full text-left flex items-center gap-3 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 p-3 rounded-lg shadow-sm transition">
+                    <div class="bg-amber-100 text-amber-600 p-2 rounded-md"><i data-lucide="cpu" class="w-5 h-5"></i></div>
+                    <div>
+                        <div class="font-bold text-sm text-slate-800">Analisis Risiko Lahan</div>
+                        <div class="text-xs text-slate-500">Prediksi AI sawah yang akan hilang</div>
+                    </div>
                 </button>
-                <div id="zoning-status" class="hidden mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-700 text-center animate-pulse">
-                    Mode Aktif: Klik lokasi mana saja di peta
+            </div>
+
+            <!-- Feature 4: Zoning Simulator -->
+            <div>
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-emerald-600"></i> 3. Smart Zoning
+                </h2>
+                <p class="text-xs text-slate-500 mb-2">Simulasi untuk investor. Klik lahan di peta untuk mengecek apakah izin pembangunan disetujui atau ditolak.</p>
+                <button id="btn-zoning" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2">
+                    <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> Aktifkan Mode Investor
+                </button>
+                <div id="zoning-status" class="hidden mt-2 p-2 bg-slate-100 border border-slate-300 rounded text-xs text-slate-700 text-center font-bold animate-pulse">
+                    MODE AKTIF: Klik lokasi mana saja di peta!
                 </div>
+            </div>
+
+            <!-- NEW: Feature 4: Import SHP -->
+            <div>
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4 text-emerald-600"></i> 4. Import Data (SHP/GeoJSON)
+                </h2>
+                <label class="w-full flex items-center justify-center gap-2 bg-indigo-50 border-2 border-dashed border-indigo-300 hover:bg-indigo-100 p-4 rounded-lg cursor-pointer transition">
+                    <input type="file" id="shp-upload" class="hidden" accept=".shp, .json, .geojson">
+                    <i data-lucide="file-up" class="text-indigo-600"></i>
+                    <span class="text-xs font-bold text-indigo-700">Upload File Lahan (.shp/.json)</span>
+                </label>
+                <div id="import-status" class="hidden mt-2 p-2 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold text-center border border-emerald-200">
+                    Data berhasil dimuat!
+                </div>
+            </div>
+
+            <!-- Feature 6: Scenario Simulation -->
+            <div>
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4 text-emerald-600"></i> 6. Decision Support
+                </h2>
+                <button id="btn-scenario" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2">
+                    <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Bandingkan Skenario 2035
+                </button>
             </div>
 
         </div>
     </aside>
 
     <!-- Main Map Area -->
-    <main class="flex-1 relative h-2/3 md:h-full">
+    <main class="flex-1 relative h-1/2 md:h-full">
+        <!-- Feature 5: Smart Dashboard (Overlay on Map) -->
+        <div class="absolute top-5 left-1/2 transform -translate-x-1/2 z-[400] glass-dark text-white p-4 rounded-xl shadow-2xl w-11/12 md:w-[600px] flex justify-between items-center border border-slate-600">
+            <div class="text-center">
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Total Sawah (Ha)</p>
+                <p id="stat-total" class="text-2xl font-bold text-emerald-400">2,850</p>
+            </div>
+            <div class="h-10 w-px bg-slate-600"></div>
+            <div class="text-center">
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Alih Fungsi (Ha)</p>
+                <p id="stat-lost" class="text-2xl font-bold text-rose-400">0</p>
+            </div>
+            <div class="h-10 w-px bg-slate-600"></div>
+            <div class="text-center">
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Zona Risiko Tinggi</p>
+                <p id="stat-risk" class="text-2xl font-bold text-amber-400">0 Lokasi</p>
+            </div>
+        </div>
+
         <div id="map"></div>
         
         <!-- Legend Overlay -->
-        <div class="absolute bottom-5 right-5 z-[400] glass-panel p-4 rounded-lg shadow-lg">
-            <h3 class="text-xs font-bold uppercase text-slate-600 mb-2 border-b pb-1">Legenda Sawah</h3>
-            <div class="space-y-1.5 text-xs">
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#22c55e] border border-[#166534]"></span> Sawah Produktif</div>
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#f59e0b] border border-[#92400e]"></span> Risiko Alih Fungsi</div>
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#ef4444] border border-[#991b1b]"></span> Sudah Berubah Fungsi</div>
+        <div class="absolute bottom-5 right-5 z-[400] glass-panel p-4 rounded-lg shadow-lg border border-slate-200">
+            <h3 class="text-xs font-bold uppercase text-slate-700 mb-2 border-b border-slate-200 pb-1">Legenda Zonasi AI</h3>
+            <div class="space-y-2 text-xs font-medium text-slate-600">
+                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#22c55e] border border-[#166534] opacity-70"></span> Zona Perlindungan (Sawah)</div>
+                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#f59e0b] border border-[#92400e] opacity-70"></span> Zona Risiko Alih Fungsi</div>
+                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#ef4444] border border-[#991b1b] opacity-70"></span> Lahan Beralih Fungsi</div>
+            </div>
+        </div>
+
+        <!-- Notification Toast (Early Warning System) -->
+        <div id="ews-toast" class="absolute top-24 right-5 z-[500] bg-rose-600 text-white p-4 rounded-lg shadow-2xl transform translate-x-full transition-transform duration-500 max-w-xs border border-rose-400">
+            <div class="flex items-start gap-3">
+                <i data-lucide="bell-ring" class="w-6 h-6 animate-bounce"></i>
+                <div>
+                    <h4 class="font-bold text-sm">Peringatan Dini (EWS)</h4>
+                    <p id="ews-message" class="text-xs mt-1 text-rose-100">Desa Sembalun mengalami lonjakan alih fungsi lahan sebesar 215 Ha pada tahun ini!</p>
+                </div>
             </div>
         </div>
     </main>
+
+    <!-- Modal Scenario Simulation -->
+    <div id="scenario-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col">
+            <div class="p-5 bg-indigo-600 text-white flex justify-between items-center">
+                <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="trending-up"></i> Simulasi Prediksi 2035</h2>
+                <button id="close-modal" class="hover:text-indigo-200 transition"><i data-lucide="x"></i></button>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50">
+                <!-- Scenario 1 -->
+                <div class="bg-white p-5 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-rose-500"></div>
+                    <h3 class="font-bold text-slate-800 text-lg mb-1 mt-2">Skenario 1</h3>
+                    <p class="text-xs text-slate-500 mb-4 font-medium">Pembangunan tanpa kontrol (Business as Usual)</p>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Penyusutan Sawah</span>
+                            <span class="font-bold text-rose-600">- 450 Hektar</span>
+                        </div>
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Suhu Mikro</span>
+                            <span class="font-bold text-amber-600">Naik 1.2°C</span>
+                        </div>
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Produksi Pangan</span>
+                            <span class="font-bold text-rose-600">Turun 25%</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-rose-50 rounded text-rose-800 text-xs text-center font-semibold">
+                        ❌ Mengancam Ketahanan Pangan Nasional
+                    </div>
+                </div>
+
+                <!-- Scenario 2 -->
+                <div class="bg-white p-5 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
+                    <h3 class="font-bold text-slate-800 text-lg mb-1 mt-2">Skenario 2</h3>
+                    <p class="text-xs text-slate-500 mb-4 font-medium">Pembangunan mengikuti zonasi SAFEGIS</p>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Penyusutan Sawah</span>
+                            <span class="font-bold text-emerald-600">Hanya 80 Hektar</span>
+                        </div>
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Suhu Mikro</span>
+                            <span class="font-bold text-emerald-600">Stabil</span>
+                        </div>
+                        <div class="flex justify-between text-sm border-b pb-2">
+                            <span class="text-slate-600">Ekonomi Wisata</span>
+                            <span class="font-bold text-blue-600">Tumbuh 40%</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-emerald-50 rounded text-emerald-800 text-xs text-center font-semibold">
+                        ✅ Pertanian Terjaga, Pariwisata Maju
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-100 border-t text-center">
+                <p class="text-sm font-bold text-slate-700">Rekomendasi Sistem:</p>
+                <p class="text-xs text-slate-600 mt-1">Gunakan Peta Zonasi SAFEGIS sebagai acuan penerbitan IMB (Izin Mendirikan Bangunan) di Sembalun.</p>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Initialize Lucide Icons
@@ -156,185 +377,257 @@
         
         // Initialize Leaflet Map
         const map = L.map('map', { zoomControl: false }).setView(CENTER, 15);
-        
-        // Add zoom control to top right
         L.control.zoom({ position: 'topright' }).addTo(map);
 
-        // Add Base Map (OpenStreetMap)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18,
-            attribution: '© OpenStreetMap | SAFEGIS Prototype'
+        // ==========================================
+        // GOOGLE MAPS INTEGRATION VIA LEAFLET
+        // ==========================================
+        // We use Google Maps Hybrid (Satellite + Roads/Labels) for the AI reading effect
+        const googleHybrid = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '© Google Maps (Simulated API for SAFEGIS)'
         }).addTo(map);
 
-        // Dummy Data - Sembalun Features
+        // ==========================================
+        // DUMMY DATA: TIME SERIES (2020, 2023, 2026)
+        // ==========================================
+        
         // 1. Polygons for Sawah (Rice Fields)
+        // status represents the condition in that year.
         const sawahData = [
-            { id: 1, name: "Blok A (Produktif)", status: "aman", coords: [[-8.355, 116.520], [-8.355, 116.524], [-8.359, 116.524], [-8.359, 116.520]] },
-            { id: 2, name: "Blok B (Risiko Tinggi - Dekat Jalan)", status: "risiko", coords: [[-8.353, 116.525], [-8.353, 116.529], [-8.357, 116.529], [-8.357, 116.525]] },
-            { id: 3, name: "Blok C (Telah Berubah - Dulu Sawah 2020)", status: "alih_fungsi", coords: [[-8.360, 116.521], [-8.360, 116.526], [-8.363, 116.526], [-8.363, 116.521]] },
-            { id: 4, name: "Blok D (Produktif)", status: "aman", coords: [[-8.361, 116.527], [-8.361, 116.531], [-8.365, 116.531], [-8.365, 116.527]] }
+            { id: 1, name: "Blok Utara (Pertanian Abadi)", status: {2020: "aman", 2023: "aman", 2026: "aman"}, risk: "rendah", coords: [[-8.355, 116.520], [-8.355, 116.524], [-8.359, 116.524], [-8.359, 116.520]] },
+            { id: 2, name: "Blok Tengah (Tepi Jalan)", status: {2020: "aman", 2023: "aman", 2026: "risiko"}, risk: "tinggi", coords: [[-8.353, 116.525], [-8.353, 116.529], [-8.357, 116.529], [-8.357, 116.525]] },
+            { id: 3, name: "Blok Selatan (Kawasan Wisata)", status: {2020: "aman", 2023: "alih_fungsi", 2026: "alih_fungsi"}, risk: "tinggi", coords: [[-8.360, 116.521], [-8.360, 116.526], [-8.363, 116.526], [-8.363, 116.521]] },
+            { id: 4, name: "Blok Timur (Produktif)", status: {2020: "aman", 2023: "aman", 2026: "aman"}, risk: "sedang", coords: [[-8.361, 116.527], [-8.361, 116.531], [-8.365, 116.531], [-8.365, 116.527]] }
         ];
 
-        // 2. Points of Interest (Bangunan/Jalan)
+        // 2. Points of Interest (Bangunan) with yearBuilt property
         const poiData = [
-            { type: 'Villa', lat: -8.352, lng: 116.530, name: 'Villa Rinjani View', icon: '🏡', color: '#3b82f6' },
-            { type: 'Villa', lat: -8.354, lng: 116.518, name: 'Sembalun Green Villa', icon: '🏡', color: '#3b82f6' },
-            { type: 'Homestay', lat: -8.362, lng: 116.524, name: 'Bale Sembalun (Bangunan Baru)', icon: '🏠', color: '#f97316' }, // Inside Blok C (alih fungsi)
-            { type: 'Glamping', lat: -8.366, lng: 116.528, name: 'Bukit Glamping', icon: '🏕️', color: '#8b5cf6' },
-            { type: 'Kafe', lat: -8.356, lng: 116.529, name: 'Kopi Sembalun', icon: '☕', color: '#78350f' },
-            { type: 'Wisata', lat: -8.350, lng: 116.524, name: 'Bukit Selong', icon: '🏔️', color: '#06b6d4' }
+            { type: 'Wisata', lat: -8.350, lng: 116.524, name: 'Bukit Selong', icon: '🏔️', color: '#06b6d4', yearBuilt: 2020 },
+            { type: 'Villa', lat: -8.352, lng: 116.530, name: 'Villa Rinjani View', icon: '🏡', color: '#3b82f6', yearBuilt: 2020 },
+            
+            { type: 'Kafe', lat: -8.356, lng: 116.529, name: 'Kopi Sembalun', icon: '☕', color: '#b45309', yearBuilt: 2023 },
+            { type: 'Homestay', lat: -8.362, lng: 116.524, name: 'Bale Sembalun', icon: '🏠', color: '#f97316', yearBuilt: 2023 }, // This appears in Blok 3
+            
+            { type: 'Glamping', lat: -8.366, lng: 116.528, name: 'Bukit Glamping', icon: '🏕️', color: '#a855f7', yearBuilt: 2026 },
+            { type: 'Restoran', lat: -8.354, lng: 116.527, name: 'Sembalun Resto', icon: '🍽️', color: '#ef4444', yearBuilt: 2026 }, // Appears near Blok 2
+            { type: 'Villa', lat: -8.361, lng: 116.522, name: 'Villa Sawah', icon: '🏡', color: '#3b82f6', yearBuilt: 2026 }, // Appears in Blok 3
         ];
 
-        // 3. Line for Roads
+        // 3. Roads
         const roadsData = [
-            { type: 'Jalan', coords: [[-8.350, 116.524], [-8.365, 116.525], [-8.370, 116.529]] }
+            { type: 'Wisata', coords: [[-8.350, 116.524], [-8.365, 116.525], [-8.370, 116.529]], name: "Jalan Utama Sembalun" }
+        ];
+
+        // 4. Data Tutupan Lahan Lainnya (Diambil dari Atribut Data SHP/DBF)
+        const otherLandUseData = [
+            { type: 'Kebun', name: 'Perkebunan/Kebun', coords: [[-8.358, 116.515], [-8.358, 116.519], [-8.362, 116.519], [-8.362, 116.515]], color: '#84cc16' },
+            { type: 'Permukiman', name: 'Permukiman dan Tempat Kegiatan', coords: [[-8.365, 116.520], [-8.365, 116.525], [-8.369, 116.525], [-8.369, 116.520]], color: '#94a3b8' },
+            { type: 'Hutan', name: 'Hutan Rimba', coords: [[-8.345, 116.510], [-8.345, 116.535], [-8.349, 116.535], [-8.349, 116.510]], color: '#166534' }
         ];
 
         // Layer Groups
         const layers = {
             Sawah: L.layerGroup().addTo(map),
+            Kebun: L.layerGroup().addTo(map),
+            Permukiman: L.layerGroup().addTo(map),
+            Hutan: L.layerGroup().addTo(map),
             Villa: L.layerGroup().addTo(map),
             Homestay: L.layerGroup().addTo(map),
             Glamping: L.layerGroup().addTo(map),
             Kafe: L.layerGroup().addTo(map),
+            Restoran: L.layerGroup().addTo(map),
             Wisata: L.layerGroup().addTo(map),
-            Jalan: L.layerGroup().addTo(map),
+            UserUpload: L.layerGroup().addTo(map) // New Layer
         };
 
-        // Styling Functions for Sawah
-        const getSawahStyle = (mode, status) => {
-            let color = "#22c55e"; // Default Green (Produktif)
-            let opacity = 0.5;
+        // State Variables
+        let currentYear = 2020;
+        let isRiskMode = false;
+        let isZoningMode = false;
+        let zoningMarker = null;
 
-            if (mode === 'detect' && status === 'alih_fungsi') {
-                color = "#ef4444"; // Red
-                opacity = 0.7;
-            } else if (mode === 'predict' && status === 'risiko') {
-                color = "#f59e0b"; // Yellow
-                opacity = 0.7;
-            }
-            
-            return {
-                color: color,
-                fillColor: color,
-                weight: 2,
-                fillOpacity: opacity
-            };
-        };
-
-        // Render Sawah
-        const sawahPolygons = [];
-        const renderSawah = (mode = 'normal') => {
+        // Render Sawah logic
+        const renderSawah = () => {
             layers.Sawah.clearLayers();
+            let lostHectares = 0;
+            let riskCount = 0;
+
             sawahData.forEach(sawah => {
-                const style = getSawahStyle(mode, sawah.status);
-                const polygon = L.polygon(sawah.coords, style);
+                const statusThisYear = sawah.status[currentYear];
+                let color = "#22c55e"; // Default Green (Produktif)
+                let opacity = 0.5;
+
+                // Determine color based on time series status OR risk mode
+                if (isRiskMode) {
+                    if (statusThisYear === "alih_fungsi") { color = "#ef4444"; opacity = 0.7; lostHectares += 105; }
+                    else if (sawah.risk === "tinggi") { color = "#f59e0b"; opacity = 0.7; riskCount++; }
+                    else if (sawah.risk === "sedang") { color = "#eab308"; opacity = 0.6; }
+                } else {
+                    if (statusThisYear === "alih_fungsi") { color = "#ef4444"; opacity = 0.7; lostHectares += 105; }
+                    else if (statusThisYear === "risiko") { color = "#f59e0b"; opacity = 0.7; riskCount++; }
+                }
                 
-                // Popup Info
-                let popupContent = `<div class="p-1"><h3 class="font-bold border-b pb-1 mb-1">🌾 Lahan Pertanian</h3>
-                                    <p class="text-sm">${sawah.name}</p>`;
+                const polygon = L.polygon(sawah.coords, {
+                    color: color, fillColor: color, weight: 2, fillOpacity: opacity
+                });
                 
-                if(mode === 'detect' && sawah.status === 'alih_fungsi') {
-                    popupContent += `<p class="text-xs text-rose-600 mt-1 font-bold mt-2">⚠️ Peringatan: Lahan ini terekam sebagai Sawah pada 2020, namun citra 2025 menunjukkan adanya struktur bangunan permanen.</p>`;
-                } else if (mode === 'predict' && sawah.status === 'risiko') {
-                    popupContent += `<p class="text-xs text-amber-600 mt-1 font-bold mt-2">⚠️ Peringatan Risiko: AI mendeteksi lahan ini sangat berisiko dialihfungsikan karena kedekatannya dengan jalan utama dan vila baru.</p>`;
+                // Popups
+                let popupContent = `<div class="p-1"><h3 class="font-bold border-b pb-1 mb-1">🌾 Informasi Lahan</h3><p class="text-sm font-medium">${sawah.name}</p>`;
+                if (statusThisYear === 'alih_fungsi') {
+                    popupContent += `<p class="text-xs text-rose-600 mt-1 font-bold bg-rose-50 p-1 rounded">❌ Lahan ini telah beralih fungsi menjadi bangunan permanen.</p>`;
+                } else if (isRiskMode && sawah.risk === 'tinggi') {
+                    popupContent += `<p class="text-xs text-amber-600 mt-1 font-bold bg-amber-50 p-1 rounded">⚠️ AI memprediksi risiko tinggi alih fungsi lahan dalam 2 tahun ke depan.</p>`;
                 }
                 popupContent += `</div>`;
-                
                 polygon.bindPopup(popupContent);
                 
-                // Event listener for Zoning Simulator
+                // Zoning click event
                 polygon.on('click', (e) => {
                     if(isZoningMode) {
-                        L.DomEvent.stopPropagation(e); // Stop map click
-                        handleZoningCheck(e.latlng, true); // true = hit a sawah
+                        L.DomEvent.stopPropagation(e);
+                        handleZoningCheck(e.latlng, true, statusThisYear);
                     }
                 });
 
                 layers.Sawah.addLayer(polygon);
-                sawahPolygons.push(polygon);
+            });
+
+            // Update Dashboard
+            document.getElementById('stat-lost').innerText = lostHectares;
+            document.getElementById('stat-total').innerText = (2850 - lostHectares).toLocaleString();
+            document.getElementById('stat-risk').innerText = isRiskMode ? riskCount + " Lokasi" : "-";
+        };
+
+        // Render POIs logically based on year
+        const renderPOIs = () => {
+            ['Villa', 'Homestay', 'Glamping', 'Kafe', 'Restoran', 'Wisata'].forEach(type => layers[type].clearLayers());
+            
+            // Draw Roads
+            roadsData.forEach(road => {
+                L.polyline(road.coords, { color: '#fbbf24', weight: 4, opacity: 0.8 }).addTo(layers[road.type]);
+            });
+
+            // Draw Markers
+            poiData.forEach(poi => {
+                if (poi.yearBuilt <= currentYear) {
+                    const htmlIcon = L.divIcon({
+                        html: `<div class="custom-marker" style="background-color: ${poi.color}; width: 30px; height: 30px;">${poi.icon}</div>`,
+                        className: '',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+                    const marker = L.marker([poi.lat, poi.lng], { icon: htmlIcon });
+                    marker.bindPopup(`<b>${poi.name}</b><br><span class="text-xs text-slate-500">Terdeteksi sejak: ${poi.yearBuilt}</span>`);
+                    layers[poi.type].addLayer(marker);
+                }
             });
         };
+
+        // Initialize Map Content
         renderSawah();
+        renderPOIs();
 
-        // Render POIs
-        poiData.forEach(poi => {
-            const htmlIcon = L.divIcon({
-                html: `<div class="custom-marker" style="background-color: ${poi.color}; width: 24px; height: 24px; font-size: 12px;">${poi.icon}</div>`,
-                className: '',
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
+        // Render Static Land Use (Kebun, Permukiman, Hutan)
+        otherLandUseData.forEach(land => {
+            const polygon = L.polygon(land.coords, {
+                color: land.color, fillColor: land.color, weight: 2, fillOpacity: 0.35
             });
-            const marker = L.marker([poi.lat, poi.lng], { icon: htmlIcon });
-            marker.bindPopup(`<b>${poi.name}</b><br>Kategori: ${poi.type}`);
-            layers[poi.type].addLayer(marker);
+            polygon.bindPopup(`<div class="p-1"><h3 class="font-bold border-b pb-1 mb-1">🌍 Kelas Lahan</h3><p class="text-sm font-medium">${land.name}</p></div>`);
+            layers[land.type].addLayer(polygon);
         });
 
-        // Render Roads
-        roadsData.forEach(road => {
-            const polyline = L.polyline(road.coords, { color: '#64748b', weight: 6, opacity: 0.8 });
-            layers[road.type].addLayer(polyline);
+        // Shared DOM Elements for both features
+        const ewsToast = document.getElementById('ews-toast');
+        const scanLine = document.getElementById('scan-line');
+
+        // ==========================================
+        // FEATURE 4: IMPORT SHP SIMULATION
+        // ==========================================
+        document.getElementById('shp-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const importStatus = document.getElementById('import-status');
+            importStatus.classList.remove('hidden');
+            importStatus.innerText = "Memproses " + file.name + "...";
+
+            // Simulating parsing SHP
+            setTimeout(() => {
+                // Add dummy polygon for demonstration
+                const dummyCoords = [[-8.368, 116.530], [-8.368, 116.535], [-8.372, 116.535], [-8.372, 116.530]];
+                const polygon = L.polygon(dummyCoords, {
+                    color: '#6366f1', fillColor: '#818cf8', weight: 3, dashArray: '5, 5'
+                }).addTo(layers.UserUpload);
+                
+                polygon.bindPopup("<b>Data User:</b><br>Kawasan Industri Baru");
+                importStatus.innerText = "Berhasil memuat " + file.name;
+                importStatus.classList.replace('bg-emerald-50', 'bg-blue-50');
+                importStatus.classList.replace('text-emerald-700', 'text-blue-700');
+                importStatus.classList.replace('border-emerald-200', 'border-blue-200');
+            }, 2000);
         });
 
-        // 1. Layer Toggles
+        // ==========================================
+        // FEATURE 1: TIME SERIES SLIDER
+        // ==========================================
+        const slider = document.getElementById('year-slider');
+        const yearDisplay = document.getElementById('year-display');
+
+        slider.addEventListener('change', (e) => {
+            currentYear = parseInt(e.target.value);
+            yearDisplay.innerText = currentYear;
+            
+            // AI Scan Animation
+            scanLine.style.display = 'block';
+            scanLine.style.animation = 'none';
+            setTimeout(() => { scanLine.style.animation = 'scanline 1.5s ease-in-out'; }, 10);
+            
+            setTimeout(() => {
+                renderSawah();
+                renderPOIs();
+                scanLine.style.display = 'none';
+
+                // Feature 4: Early Warning System Logic
+                if (currentYear === 2023) {
+                    ewsToast.classList.remove('translate-x-full');
+                    document.getElementById('ews-message').innerText = "Terdeteksi pembangunan Homestay baru di Blok Selatan yang sebelumnya adalah sawah!";
+                    setTimeout(() => { ewsToast.classList.add('translate-x-full'); }, 5000);
+                } else if (currentYear === 2026) {
+                    ewsToast.classList.remove('translate-x-full');
+                    document.getElementById('ews-message').innerText = "KRITIS: Lonjakan pembangunan Glamping dan Restoran mengancam Blok Tengah!";
+                    setTimeout(() => { ewsToast.classList.add('translate-x-full'); }, 5000);
+                }
+            }, 750); // Update map midway through scan animation
+        });
+
+        // ==========================================
+        // FEATURE 2: RISK ASSESSMENT & TOGGLES
+        // ==========================================
+        document.getElementById('btn-risk').addEventListener('click', function() {
+            isRiskMode = !isRiskMode;
+            if(isRiskMode) {
+                this.classList.replace('bg-white', 'bg-amber-100');
+                this.classList.replace('border-amber-200', 'border-amber-500');
+            } else {
+                this.classList.replace('bg-amber-100', 'bg-white');
+                this.classList.replace('border-amber-500', 'border-amber-200');
+            }
+            renderSawah();
+        });
+
         document.querySelectorAll('#layer-toggles input').forEach(checkbox => {
             checkbox.addEventListener('change', (e) => {
                 const layerType = e.target.value;
-                if (e.target.checked) {
-                    map.addLayer(layers[layerType]);
-                } else {
-                    map.removeLayer(layers[layerType]);
-                }
+                if (e.target.checked) { map.addLayer(layers[layerType]); } 
+                else { map.removeLayer(layers[layerType]); }
             });
         });
 
-        // 2. Analisis Buttons
-        const btnReset = document.getElementById('btn-reset');
-        
-        document.getElementById('btn-detect').addEventListener('click', () => {
-            renderSawah('detect');
-            btnReset.classList.remove('hidden');
-            
-            // Highlight specific area on map
-            map.flyTo([-8.361, 116.523], 16);
-            
-            // Show custom leaflet popup as notification
-            L.popup({className: 'custom-popup'})
-                .setLatLng([-8.360, 116.523])
-                .setContent(`<div class="p-2 text-center">
-                    <div class="text-3xl mb-1">🚨</div>
-                    <b class="text-rose-600">Perubahan Terdeteksi!</b>
-                    <p class="text-xs text-slate-600 mt-1">Satelit menemukan 1 area sawah berubah fungsi menjadi bangunan dari 2020 ke 2025.</p>
-                </div>`)
-                .openOn(map);
-        });
-
-        document.getElementById('btn-predict').addEventListener('click', () => {
-            renderSawah('predict');
-            btnReset.classList.remove('hidden');
-            
-            map.flyTo([-8.355, 116.527], 16);
-
-            L.popup({className: 'custom-popup'})
-                .setLatLng([-8.355, 116.527])
-                .setContent(`<div class="p-2 text-center">
-                    <div class="text-3xl mb-1">⚠️</div>
-                    <b class="text-amber-600">Risiko Tinggi!</b>
-                    <p class="text-xs text-slate-600 mt-1">AI memprediksi area kuning akan segera dialihfungsikan melihat tren di sekitarnya.</p>
-                </div>`)
-                .openOn(map);
-        });
-
-        btnReset.addEventListener('click', () => {
-            renderSawah('normal');
-            btnReset.classList.add('hidden');
-            map.flyTo(CENTER, 15);
-            map.closePopup();
-        });
-
-        // 3. Zoning Simulator Logic
-        let isZoningMode = false;
-        let zoningMarker = null;
+        // ==========================================
+        // FEATURE 3: ZONING SIMULATOR
+        // ==========================================
         const btnZoning = document.getElementById('btn-zoning');
         const zoningStatus = document.getElementById('zoning-status');
         const mapContainer = document.getElementById('map');
@@ -342,68 +635,72 @@
         btnZoning.addEventListener('click', () => {
             isZoningMode = !isZoningMode;
             if (isZoningMode) {
-                btnZoning.classList.replace('bg-emerald-600', 'bg-rose-600');
-                btnZoning.classList.replace('hover:bg-emerald-700', 'hover:bg-rose-700');
-                btnZoning.innerHTML = `<i data-lucide="x-circle" class="w-4 h-4"></i> Matikan Mode Pengecekan`;
+                btnZoning.classList.replace('bg-slate-800', 'bg-rose-600');
+                btnZoning.classList.replace('hover:bg-slate-900', 'hover:bg-rose-700');
+                btnZoning.innerHTML = `<i data-lucide="x-circle" class="w-4 h-4"></i> Matikan Mode Investor`;
                 zoningStatus.classList.remove('hidden');
                 mapContainer.classList.add('cursor-crosshair');
-                lucide.createIcons();
             } else {
-                btnZoning.classList.replace('bg-rose-600', 'bg-emerald-600');
-                btnZoning.classList.replace('hover:bg-rose-700', 'hover:bg-emerald-700');
-                btnZoning.innerHTML = `<i data-lucide="map-pin" class="w-4 h-4"></i> Aktifkan Mode Pengecekan`;
+                btnZoning.classList.replace('bg-rose-600', 'bg-slate-800');
+                btnZoning.classList.replace('hover:bg-rose-700', 'hover:bg-slate-900');
+                btnZoning.innerHTML = `<i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> Aktifkan Mode Investor`;
                 zoningStatus.classList.add('hidden');
                 mapContainer.classList.remove('cursor-crosshair');
                 if (zoningMarker) map.removeLayer(zoningMarker);
                 map.closePopup();
-                lucide.createIcons();
             }
+            lucide.createIcons();
         });
 
-        const handleZoningCheck = (latlng, isHitSawah) => {
+        const handleZoningCheck = (latlng, isHitSawah, statusThisYear) => {
             if (zoningMarker) map.removeLayer(zoningMarker);
             
-            // Drop a pin
             zoningMarker = L.marker(latlng).addTo(map);
 
-            // Simulate loading check
             zoningMarker.bindPopup(`<div class="p-4 text-center">
-                <div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-emerald-600 rounded-full" role="status" aria-label="loading"></div>
-                <p class="text-xs text-slate-500 mt-2">Menganalisis tata ruang wilayah...</p>
+                <div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-emerald-600 rounded-full"></div>
+                <p class="text-xs font-bold text-slate-700 mt-2">AI Menganalisis Tata Ruang...</p>
             </div>`).openPopup();
 
             setTimeout(() => {
                 let content = '';
-                if (isHitSawah) {
+                if (isHitSawah && statusThisYear !== "alih_fungsi") {
                     content = `
-                        <div class="p-3 text-center max-w-[200px]">
+                        <div class="p-3 text-center w-[220px]">
                             <div class="text-4xl mb-2">❌</div>
-                            <h3 class="font-bold text-rose-600 mb-1">Izin Ditolak</h3>
-                            <p class="text-xs text-slate-600">Lokasi ini masuk dalam <b>Zona Pertanian Produktif</b> (Sawah). Pembangunan dilarang untuk menjaga ketahanan pangan.</p>
-                            <button class="mt-3 w-full bg-slate-100 hover:bg-slate-200 text-xs py-1.5 rounded text-slate-700 transition" onclick="map.closePopup()">Cari Lokasi Lain</button>
+                            <h3 class="font-bold text-rose-600 mb-1 text-base">IZIN DITOLAK</h3>
+                            <p class="text-xs text-slate-600">Lokasi ini masuk dalam <b>Zona Perlindungan Pertanian (LSD)</b>. Dilarang mendirikan bangunan komersial.</p>
+                            <button class="mt-3 w-full bg-slate-100 hover:bg-slate-200 text-xs py-2 rounded font-bold text-slate-700 transition" onclick="map.closePopup()">Cari Lokasi Lain</button>
                         </div>
                     `;
                 } else {
                     content = `
-                        <div class="p-3 text-center max-w-[200px]">
+                        <div class="p-3 text-center w-[220px]">
                             <div class="text-4xl mb-2">✅</div>
-                            <h3 class="font-bold text-emerald-600 mb-1">Rekomendasi Sesuai</h3>
-                            <p class="text-xs text-slate-600">Lokasi ini <b>berada di luar</b> area sawah produktif. Izin pembangunan Glamping/Homestay berpeluang besar disetujui.</p>
-                            <button class="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-xs py-1.5 rounded text-white transition" onclick="alert('Formulir Perizinan dibuka...'); map.closePopup()">Lanjut Proses Izin</button>
+                            <h3 class="font-bold text-emerald-600 mb-1 text-base">IZIN DISETUJUI</h3>
+                            <p class="text-xs text-slate-600">Lokasi berada di luar area sawah produktif. Sesuai untuk pengembangan pariwisata.</p>
+                            <button class="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-xs py-2 rounded font-bold text-white transition" onclick="map.closePopup()">Lanjut Proses Izin</button>
                         </div>
                     `;
                 }
                 zoningMarker.setPopupContent(content);
-            }, 1000);
+            }, 1500);
         };
 
-        // Map Click Event (triggers when clicking OUTSIDE sawah polygons)
         map.on('click', (e) => {
-            if(isZoningMode) {
-                handleZoningCheck(e.latlng, false); // false = not hitting a specific sawah polygon
-            }
+            if(isZoningMode) { handleZoningCheck(e.latlng, false, null); }
         });
 
+        // ==========================================
+        // FEATURE 6: SCENARIO SIMULATION MODAL
+        // ==========================================
+        const modal = document.getElementById('scenario-modal');
+        document.getElementById('btn-scenario').addEventListener('click', () => {
+            modal.classList.add('modal-active');
+        });
+        document.getElementById('close-modal').addEventListener('click', () => {
+            modal.classList.remove('modal-active');
+        });
     </script>
 </body>
 </html>
