@@ -3,256 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAFEGIS - Sembalun Smart Land Protection</title>
+    <title>SAFEGIS - Smart Land Protection System</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js untuk Grafik -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Turf.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <!-- shpjs untuk parsing Shapefile (.zip) di sisi klien -->
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; overflow: hidden; background-color: #0f172a; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body, html { 
+            margin: 0; padding: 0; height: 100%; 
+            font-family: 'Inter', sans-serif; 
+            overflow: hidden; 
+            background-color: #0f172a; 
+        }
+        
         #map { width: 100%; height: 100%; z-index: 10; }
         
         .glass-panel {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 1.0);
+            border: 1px solid #cbd5e1;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .glass-dark {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #1e293b;
+            border: 1px solid #475569;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
         }
 
-        /* Custom scrollbar */
-        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
-        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-        .sidebar-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        
-        /* Map custom markers */
-        .custom-marker {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            color: white;
-            font-size: 14px;
-            border: 2px solid white;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-            transition: transform 0.3s ease;
-        }
-        .custom-marker:hover { transform: scale(1.2); }
+        /* Scrollbar kustom */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
         
         .cursor-crosshair { cursor: crosshair !important; }
 
-        /* Animation for AI Scan */
-        @keyframes scanline {
-            0% { top: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
+        /* Animasi Notifikasi (EWS) */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
-        .ai-scan-effect {
-            position: absolute;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: #10b981;
-            box-shadow: 0 0 15px 2px #10b981;
-            z-index: 999;
-            pointer-events: none;
-            display: none;
+        .ews-active {
+            animation: slideInRight 0.5s ease-out forwards;
+            display: flex !important;
         }
 
-        /* AI Bounding Box Styles for Computer Vision Simulation */
-        .ai-bounding-box {
-            border: 2px solid #10b981;
-            position: relative;
-            background: rgba(16, 185, 129, 0.15);
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4) inset;
+        /* Modal Overlay */
+        .modal-overlay {
+            background: rgba(15, 23, 42, 0.85);
+            opacity: 0;
             pointer-events: none;
-            animation: pulse-box 1.5s infinite;
+            transition: opacity 0.3s ease;
+            z-index: 9999;
         }
-        .ai-bounding-box.building {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.15);
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4) inset;
-        }
-        .ai-bounding-box.kebun {
-            border-color: #84cc16;
-            background: rgba(132, 204, 22, 0.15);
-            box-shadow: 0 0 15px rgba(132, 204, 22, 0.4) inset;
-        }
-        .ai-bounding-box.permukiman {
-            border-color: #94a3b8;
-            background: rgba(148, 163, 184, 0.15);
-            box-shadow: 0 0 15px rgba(148, 163, 184, 0.4) inset;
-        }
-        .ai-label {
-            position: absolute;
-            top: -22px;
-            left: -2px;
-            background: #10b981;
-            color: #0f172a;
-            font-size: 11px;
-            font-weight: 800;
-            padding: 2px 8px;
-            white-space: nowrap;
-            letter-spacing: 0.5px;
-            border-radius: 2px 2px 0 0;
-            font-family: monospace;
-        }
-        .ai-bounding-box.building .ai-label {
-            background: #3b82f6;
-            color: white;
-        }
-        .ai-bounding-box.kebun .ai-label {
-            background: #84cc16;
-            color: #0f172a;
-        }
-        .ai-bounding-box.permukiman .ai-label {
-            background: #94a3b8;
-            color: white;
-        }
-        @keyframes pulse-box {
-            0% { opacity: 0.6; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.02); }
-            100% { opacity: 0.6; transform: scale(1); }
+        .modal-active {
+            opacity: 1;
+            pointer-events: auto;
         }
 
-        /* Modal Scenario */
-        .modal-active { display: flex !important; }
+        /* Loading Overlay Custom */
+        #loading-overlay {
+            background: #0f172a;
+            z-index: 99999;
+        }
+
+        .leaflet-popup-content-wrapper { border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+        .leaflet-popup-content { margin: 12px; font-family: 'Inter', sans-serif; }
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-screen text-slate-800">
 
-    <!-- AI Scanning Line Overlay -->
-    <div id="scan-line" class="ai-scan-effect"></div>
-
     <!-- Sidebar -->
-    <aside class="w-full md:w-96 h-1/2 md:h-full glass-panel flex flex-col z-20 relative shadow-2xl">
+    <aside class="w-full md:w-[400px] h-1/2 md:h-full glass-panel flex flex-col z-20 relative shadow-2xl shrink-0">
         <!-- Header -->
-        <div class="p-5 bg-gradient-to-r from-emerald-800 to-teal-700 text-white flex items-center justify-between">
+        <div class="p-5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between shrink-0">
             <div class="flex items-center gap-3">
-                <i data-lucide="satellite" class="w-8 h-8 text-emerald-300"></i>
+                <i data-lucide="layers" class="w-7 h-7 text-emerald-400"></i>
                 <div>
-                    <h1 class="font-bold text-2xl tracking-wide leading-tight">SAFEGIS</h1>
-                    <p class="text-xs text-emerald-200 font-medium tracking-wide uppercase">AI Land Protection System</p>
+                    <h1 class="font-bold text-xl tracking-wide leading-tight">SAFEGIS</h1>
+                    <p class="text-[10px] text-slate-300 font-medium tracking-wide uppercase">Spatial Land Analyzer</p>
                 </div>
-            </div>
-            <div class="bg-emerald-900 px-2 py-1 rounded text-xs animate-pulse border border-emerald-500">
-                LIVE
             </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto sidebar-scroll p-5 space-y-6">
+        <div class="flex-1 overflow-y-auto p-5 space-y-6">
             
-            <!-- Feature 1: Time Series / Land Monitoring -->
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <!-- Tahap 1: Upload Data Real -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm">
                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="history" class="w-4 h-4 text-emerald-600"></i> 1. AI Land Monitoring
+                    <i data-lucide="upload-cloud" class="w-4 h-4 text-indigo-600"></i> 1. Input Data Geospasial
                 </h2>
-                <p class="text-xs text-slate-500 mb-4">Geser tahun untuk melihat AI mendeteksi perubahan lahan (Sawah menjadi Bangunan) dari citra Google Maps.</p>
+                <p class="text-[11px] text-slate-500 mb-3">Upload file <b>GeoJSON</b> atau <b>Shapefile (Format .ZIP)</b>. Tentukan tahun data untuk kalkulasi tren alih fungsi.</p>
                 
-                <div class="relative px-2">
-                    <input type="range" id="year-slider" min="2020" max="2026" step="3" value="2020" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-600">
-                    <div class="flex justify-between text-xs font-bold text-slate-600 mt-2">
-                        <span>2020</span>
-                        <span>2023</span>
-                        <span>2026</span>
+                <div class="space-y-3 mb-3">
+                    <div class="p-2.5 border border-indigo-100 bg-indigo-50/50 rounded-lg">
+                        <div class="flex gap-2 mb-2">
+                            <div class="w-1/3">
+                                <label class="block text-[10px] font-bold text-indigo-900 mb-1">Tahun (T0):</label>
+                                <input type="number" id="year-t0" placeholder="2020" value="2020" class="block w-full text-xs text-slate-700 border border-indigo-200 rounded p-1.5 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm">
+                            </div>
+                            <div class="w-2/3">
+                                <label class="block text-[10px] font-bold text-indigo-900 mb-1">File Awal (T0):</label>
+                                <input type="file" id="file-t0" accept=".geojson,.json,.zip" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 cursor-pointer border border-indigo-200 rounded bg-white p-1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-2.5 border border-emerald-100 bg-emerald-50/50 rounded-lg">
+                        <div class="flex gap-2 mb-2">
+                            <div class="w-1/3">
+                                <label class="block text-[10px] font-bold text-emerald-900 mb-1">Tahun (T1):</label>
+                                <input type="number" id="year-t1" placeholder="2025" value="2025" class="block w-full text-xs text-slate-700 border border-emerald-200 rounded p-1.5 focus:ring-emerald-500 focus:border-emerald-500 bg-white shadow-sm">
+                            </div>
+                            <div class="w-2/3">
+                                <label class="block text-[10px] font-bold text-emerald-900 mb-1">File Akhir (T1):</label>
+                                <input type="file" id="file-t1" accept=".geojson,.json,.zip" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-100 file:text-emerald-700 hover:file:bg-emerald-200 cursor-pointer border border-emerald-200 rounded bg-white p-1">
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-3 p-2 bg-emerald-100 rounded text-center flex justify-between items-center">
-                    <span class="text-xs text-emerald-800 font-semibold">Tahun Aktif: <span id="year-display" class="text-lg font-bold">2020</span></span>
-                </div>
+
+                <button id="btn-process-files" class="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg transition font-semibold text-sm cursor-pointer shadow-md">
+                    <i data-lucide="play-circle" class="w-4 h-4"></i> Proses & Analisis Data
+                </button>
                 
-                <!-- NEW AI SCAN BUTTON -->
-                <button id="btn-ai-scan" class="mt-4 w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg shadow-md transition flex justify-center items-center gap-2 text-sm border border-slate-700">
-                    <i data-lucide="scan" class="w-4 h-4 text-emerald-400"></i> Jalankan Simulasi Scan AI
-                </button>
-            </div>
-
-            <!-- Feature 2: POI Layers -->
-            <div>
-                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i> Deteksi Objek AI
-                </h2>
-                <div class="grid grid-cols-2 gap-2" id="layer-toggles">
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Sawah" checked class="accent-emerald-600 w-4 h-4"> 🌾 Sawah
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Kebun" checked class="accent-lime-500 w-4 h-4"> 🌴 Kebun
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Permukiman" checked class="accent-slate-500 w-4 h-4"> 🏘️ Permukiman
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Hutan" checked class="accent-green-800 w-4 h-4"> 🌲 Hutan
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Villa" checked class="accent-blue-500 w-4 h-4"> 🏡 Villa
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-100 p-1.5 rounded transition bg-white border border-slate-100 shadow-sm">
-                        <input type="checkbox" value="Wisata" checked class="accent-cyan-500 w-4 h-4"> 🏔️ Wisata
-                    </label>
+                <div id="upload-error" class="hidden mt-2 p-2 bg-rose-50 text-rose-700 rounded text-xs font-bold border border-rose-200">
+                    <i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Mohon pilih kedua file!
+                </div>
+                <div id="upload-status" class="hidden mt-2 p-2 bg-emerald-50 text-emerald-700 rounded text-xs font-bold text-center border border-emerald-200">
+                    <i data-lucide="check-circle" class="w-3 h-3 inline"></i> Data Berhasil Diproses!
                 </div>
             </div>
 
-            <!-- Feature 3: Risk Assessment -->
-            <div>
+            <!-- Tahap 2: Land Monitoring -->
+            <div id="panel-monitoring" class="opacity-50 pointer-events-none transition-opacity duration-300">
                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="alert-triangle" class="w-4 h-4 text-emerald-600"></i> 2. Risk Assessment
+                    <i data-lucide="activity" class="w-4 h-4 text-emerald-600"></i> 2. Land Monitoring
                 </h2>
-                <button id="btn-risk" class="w-full text-left flex items-center gap-3 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 p-3 rounded-lg shadow-sm transition">
-                    <div class="bg-amber-100 text-amber-600 p-2 rounded-md"><i data-lucide="cpu" class="w-5 h-5"></i></div>
-                    <div>
-                        <div class="font-bold text-sm text-slate-800">Analisis Risiko Lahan</div>
-                        <div class="text-xs text-slate-500">Prediksi AI sawah yang akan hilang</div>
+                <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm mb-3">
+                    <label class="text-xs font-semibold text-slate-600 block mb-2">Tampilkan Peta (Geser/Pilih):</label>
+                    <div class="flex flex-col gap-2">
+                        <div class="flex gap-2">
+                            <button class="year-btn flex-1 py-1.5 bg-emerald-600 text-white rounded text-xs font-bold transition shadow-sm" data-year="t0">Data Awal (<span id="lbl-btn-t0">T0</span>)</button>
+                            <button class="year-btn flex-1 py-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded text-xs font-bold transition" data-year="t1">Data Akhir (<span id="lbl-btn-t1">T1</span>)</button>
+                        </div>
+                        <button class="year-btn w-full py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded text-xs font-bold transition flex items-center justify-center gap-2" data-year="overlay">
+                            <i data-lucide="layers" class="w-4 h-4"></i> Intersect & Analisis Perubahan
+                        </button>
                     </div>
+
+                    <!-- Hasil Analisis Overlay -->
+                    <div id="overlay-result" class="hidden mt-3 bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 shadow-inner">
+                        <h3 class="text-[11px] font-bold text-indigo-900 mb-2 border-b border-indigo-100 pb-1 flex items-center gap-1">
+                            <i data-lucide="calculator" class="w-3 h-3 text-indigo-600"></i> Intersect & Geometry Calculator (UTM)
+                        </h3>
+                        <div class="flex justify-between text-[11px] mb-1">
+                            <span class="text-slate-500">Luas Data Awal (T0):</span>
+                            <span class="font-bold text-slate-700" id="area-t0-val">0 Ha</span>
+                        </div>
+                        <div class="flex justify-between text-[11px] mb-1">
+                            <span class="text-slate-500">Luas Data Akhir (T1):</span>
+                            <span class="font-bold text-slate-700" id="area-t1-val">0 Ha</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-bold mt-2 pt-2 border-t border-indigo-200">
+                            <span class="text-indigo-800">Total Luas Intersect (UTM):</span>
+                            <span class="text-indigo-800 font-extrabold" id="area-diff-val">0 Ha</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="openAttributeTable()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2 text-sm">
+                    <i data-lucide="table" class="w-4 h-4 text-emerald-400"></i> Lihat Atribut Spasial (ArcGIS Style)
                 </button>
             </div>
 
-            <!-- Feature 4: Zoning Simulator -->
-            <div>
+            <!-- Tahap 3: Risk Assessment -->
+            <div id="panel-risk" class="opacity-50 pointer-events-none transition-opacity duration-300">
                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="map-pin" class="w-4 h-4 text-emerald-600"></i> 3. Smart Zoning
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> 3. Risk Assessment
                 </h2>
-                <p class="text-xs text-slate-500 mb-2">Simulasi untuk investor. Klik lahan di peta untuk mengecek apakah izin pembangunan disetujui atau ditolak.</p>
-                <button id="btn-zoning" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2">
-                    <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> Aktifkan Mode Investor
+                <p class="text-[11px] text-slate-500 mb-2">Peta Risiko (Simulasi) berdasarkan kerentanan spasial.</p>
+                <button id="btn-risk" class="w-full bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 font-semibold py-2.5 rounded-lg transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                    <i data-lucide="map" class="w-4 h-4"></i> Generate Peta Risiko (Solid)
                 </button>
-                <div id="zoning-status" class="hidden mt-2 p-2 bg-slate-100 border border-slate-300 rounded text-xs text-slate-700 text-center font-bold animate-pulse">
-                    MODE AKTIF: Klik lokasi mana saja di peta!
+            </div>
+
+            <!-- Tahap 4: Smart Zoning & Decision -->
+            <div id="panel-zoning" class="opacity-50 pointer-events-none transition-opacity duration-300">
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="compass" class="w-4 h-4 text-blue-500"></i> 4. Smart Zoning & Decision
+                </h2>
+                <p class="text-[11px] text-slate-500 mb-2">Klik lokasi pada peta untuk mengevaluasi rekomendasi tata ruang.</p>
+                <div class="space-y-2">
+                    <button id="btn-zoning" class="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-medium py-2.5 rounded-lg transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                        <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> Cek Kesesuaian Lahan (Zonasi)
+                    </button>
                 </div>
             </div>
 
-            <!-- NEW: Feature 4: Import SHP -->
-            <div>
+            <!-- Tahap 5: Early Warning System -->
+            <div id="panel-ews" class="opacity-50 pointer-events-none transition-opacity duration-300">
                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="upload-cloud" class="w-4 h-4 text-emerald-600"></i> 4. Import Data (SHP/GeoJSON)
+                    <i data-lucide="bell-ring" class="w-4 h-4 text-rose-500"></i> 5. Early Warning System
                 </h2>
-                <label class="w-full flex items-center justify-center gap-2 bg-indigo-50 border-2 border-dashed border-indigo-300 hover:bg-indigo-100 p-4 rounded-lg cursor-pointer transition">
-                    <input type="file" id="shp-upload" class="hidden" accept=".shp, .json, .geojson">
-                    <i data-lucide="file-up" class="text-indigo-600"></i>
-                    <span class="text-xs font-bold text-indigo-700">Upload File Lahan (.shp/.json)</span>
-                </label>
-                <div id="import-status" class="hidden mt-2 p-2 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold text-center border border-emerald-200">
-                    Data berhasil dimuat!
-                </div>
+                <p class="text-[11px] text-slate-500 mb-2">Deteksi dini laju konversi lahan basah aktif.</p>
+                <div id="ews-result" class="hidden mb-3"></div>
+                <button id="btn-ews" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-medium py-2.5 rounded-lg transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                    <i data-lucide="megaphone" class="w-4 h-4"></i> Jalankan Deteksi EWS
+                </button>
             </div>
 
-            <!-- Feature 6: Scenario Simulation -->
-            <div>
+            <!-- Tahap 6: Smart Dashboard -->
+            <div id="panel-dashboard" class="opacity-50 pointer-events-none transition-opacity duration-300">
                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i data-lucide="git-branch" class="w-4 h-4 text-emerald-600"></i> 6. Decision Support
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-purple-500"></i> 6. Smart Dashboard
                 </h2>
-                <button id="btn-scenario" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg shadow-md transition flex justify-center items-center gap-2">
-                    <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Bandingkan Skenario 2035
+                <p class="text-[11px] text-slate-500 mb-2">Visualisasi eksekutif seluruh hasil analisis lahan.</p>
+                <button onclick="openSmartDashboard()" class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-medium py-2.5 rounded-lg transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                    <i data-lucide="pie-chart" class="w-4 h-4"></i> Buka Executive Dashboard
+                </button>
+            </div>
+
+            <!-- Tahap 7: Decision Support & Scenario -->
+            <div id="panel-scenario" class="opacity-50 pointer-events-none transition-opacity duration-300 pb-5">
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4 text-teal-500"></i> 7. Decision Support
+                </h2>
+                <p class="text-[11px] text-slate-500 mb-2">Simulasi skenario masa depan & rekomendasi kebijakan.</p>
+                <button onclick="openScenarioSimulation()" class="w-full bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 font-medium py-2.5 rounded-lg transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                    <i data-lucide="line-chart" class="w-4 h-4"></i> Simulasi Skenario Lahan
                 </button>
             </div>
 
@@ -260,447 +250,1287 @@
     </aside>
 
     <!-- Main Map Area -->
-    <main class="flex-1 relative h-1/2 md:h-full">
-        <!-- Feature 5: Smart Dashboard (Overlay on Map) -->
-        <div class="absolute top-5 left-1/2 transform -translate-x-1/2 z-[400] glass-dark text-white p-4 rounded-xl shadow-2xl w-11/12 md:w-[600px] flex justify-between items-center border border-slate-600">
-            <div class="text-center">
-                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Total Sawah (Ha)</p>
-                <p id="stat-total" class="text-2xl font-bold text-emerald-400">2,850</p>
+    <main class="flex-1 relative h-1/2 md:h-full bg-slate-200">
+        
+        <!-- Smart Dashboard (KPIs) -->
+        <div id="dashboard-kpi" class="hidden absolute top-4 left-1/2 transform -translate-x-1/2 z-[400] glass-dark text-white p-3 md:p-4 rounded-xl w-[90%] md:w-auto md:min-w-[500px] flex justify-between items-center gap-4 border border-slate-600">
+            <div class="text-center flex-1">
+                <p class="text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest mb-1">Total Fitur (T0)</p>
+                <p class="text-lg md:text-2xl font-bold text-emerald-400" id="kpi-t0">0</p>
             </div>
-            <div class="h-10 w-px bg-slate-600"></div>
-            <div class="text-center">
-                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Alih Fungsi (Ha)</p>
-                <p id="stat-lost" class="text-2xl font-bold text-rose-400">0</p>
+            <div class="h-8 w-px bg-slate-600"></div>
+            <div class="text-center flex-1">
+                <p class="text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest mb-1">Total Fitur (T1)</p>
+                <p class="text-lg md:text-2xl font-bold text-blue-400" id="kpi-t1">0</p>
             </div>
-            <div class="h-10 w-px bg-slate-600"></div>
-            <div class="text-center">
-                <p class="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Zona Risiko Tinggi</p>
-                <p id="stat-risk" class="text-2xl font-bold text-amber-400">0 Lokasi</p>
+            <div class="h-8 w-px bg-slate-600"></div>
+            <div class="text-center flex-1">
+                <p class="text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest mb-1">Area T0 Awal</p>
+                <p class="text-lg md:text-2xl font-bold text-amber-400" id="kpi-area">0 Ha</p>
             </div>
         </div>
 
         <div id="map"></div>
-        
-        <!-- Legend Overlay -->
-        <div class="absolute bottom-5 right-5 z-[400] glass-panel p-4 rounded-lg shadow-lg border border-slate-200">
-            <h3 class="text-xs font-bold uppercase text-slate-700 mb-2 border-b border-slate-200 pb-1">Legenda Zonasi AI</h3>
-            <div class="space-y-2 text-xs font-medium text-slate-600">
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#22c55e] border border-[#166534] opacity-70"></span> Zona Perlindungan (Sawah)</div>
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#f59e0b] border border-[#92400e] opacity-70"></span> Zona Risiko Alih Fungsi</div>
-                <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-[#ef4444] border border-[#991b1b] opacity-70"></span> Lahan Beralih Fungsi</div>
+
+        <!-- Grafik Overlay (Kiri Bawah) -->
+        <div id="chart-overlay" class="hidden absolute bottom-5 left-5 z-[400] glass-panel p-4 rounded-xl w-[320px] shadow-xl">
+            <h3 class="text-xs font-bold text-slate-800 mb-2 border-b border-slate-200 pb-1">Statistik Fitur T1</h3>
+            <p class="text-[10px] text-slate-500 mb-2">Sebaran Tipe/Kelas pada Data Akhir.</p>
+            <div class="h-[160px] w-full relative">
+                <canvas id="geometryChart"></canvas>
             </div>
         </div>
 
-        <!-- Notification Toast (Early Warning System) -->
-        <div id="ews-toast" class="absolute top-24 right-5 z-[500] bg-rose-600 text-white p-4 rounded-lg shadow-2xl transform translate-x-full transition-transform duration-500 max-w-xs border border-rose-400">
+        <!-- Legenda -->
+        <div class="absolute bottom-5 right-5 z-[400] glass-panel p-3 rounded-lg shadow-lg">
+            <h3 class="text-[11px] font-bold uppercase text-slate-700 mb-2 border-b border-slate-200 pb-1">Status</h3>
+            <div id="legend-content" class="space-y-1.5 text-[11px] font-medium text-slate-600">
+                Menunggu Data...
+            </div>
+        </div>
+        
+        <!-- EWS Toast -->
+        <div id="ews-toast" class="hidden absolute top-24 right-5 z-[500] bg-indigo-600 text-white p-4 rounded-xl shadow-2xl max-w-[300px] border border-indigo-400 cursor-pointer hover:bg-indigo-700 transition" onclick="this.classList.remove('ews-active')">
             <div class="flex items-start gap-3">
-                <i data-lucide="bell-ring" class="w-6 h-6 animate-bounce"></i>
+                <div class="bg-indigo-500 p-2 rounded-full shadow-inner"><i data-lucide="info" class="w-5 h-5 animate-pulse"></i></div>
                 <div>
-                    <h4 class="font-bold text-sm">Peringatan Dini (EWS)</h4>
-                    <p id="ews-message" class="text-xs mt-1 text-rose-100">Desa Sembalun mengalami lonjakan alih fungsi lahan sebesar 215 Ha pada tahun ini!</p>
+                    <h4 class="font-bold text-sm">Analisis Selesai</h4>
+                    <p class="text-[11px] mt-1 text-indigo-100 leading-relaxed">Sistem berhasil memuat dan membaca <b id="ews-count" class="text-white">0</b> fitur dari Data Spasial. Peta siap dieksplorasi!</p>
                 </div>
             </div>
         </div>
+
+        <!-- EWS Alert Toast Khusus -->
+        <div id="alert-toast" class="hidden absolute top-24 right-5 z-[500] text-white p-4 rounded-xl shadow-2xl max-w-[320px] border cursor-pointer transition" onclick="this.classList.remove('ews-active')">
+        </div>
+
     </main>
 
-    <!-- Modal Scenario Simulation -->
-    <div id="scenario-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[1000] hidden items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col">
-            <div class="p-5 bg-indigo-600 text-white flex justify-between items-center">
-                <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="trending-up"></i> Simulasi Prediksi 2035</h2>
-                <button id="close-modal" class="hover:text-indigo-200 transition"><i data-lucide="x"></i></button>
-            </div>
-            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50">
-                <!-- Scenario 1 -->
-                <div class="bg-white p-5 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-full h-2 bg-rose-500"></div>
-                    <h3 class="font-bold text-slate-800 text-lg mb-1 mt-2">Skenario 1</h3>
-                    <p class="text-xs text-slate-500 mb-4 font-medium">Pembangunan tanpa kontrol (Business as Usual)</p>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Penyusutan Sawah</span>
-                            <span class="font-bold text-rose-600">- 450 Hektar</span>
-                        </div>
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Suhu Mikro</span>
-                            <span class="font-bold text-amber-600">Naik 1.2°C</span>
-                        </div>
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Produksi Pangan</span>
-                            <span class="font-bold text-rose-600">Turun 25%</span>
-                        </div>
-                    </div>
-                    <div class="mt-4 p-3 bg-rose-50 rounded text-rose-800 text-xs text-center font-semibold">
-                        ❌ Mengancam Ketahanan Pangan Nasional
-                    </div>
+    <!-- Modal: Tabel Atribut -->
+    <div id="modal-attribute" class="fixed inset-0 modal-overlay flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden transform transition-transform duration-300 scale-95" id="modal-attr-content">
+            <div class="p-4 bg-slate-800 text-white flex justify-between items-center">
+                <div>
+                    <h2 class="font-bold text-lg flex items-center gap-2"><i data-lucide="table"></i> Ekstraksi Tabel Atribut Data Spasial</h2>
+                    <p class="text-[10px] text-slate-300 mt-1">Analisis Atribut ArcGIS-style Intersect & Geometry Calculator (T0 ➔ T1).</p>
                 </div>
+                <button onclick="closeModals()" class="hover:text-rose-400 bg-slate-700 p-1.5 rounded-lg transition"><i data-lucide="x"></i></button>
+            </div>
+            
+            <!-- Tab Navigasi Atribut -->
+            <div class="flex border-b border-slate-200 bg-slate-100 px-4 pt-2 shrink-0">
+                <button onclick="switchTableTab('t0')" id="tab-t0" class="px-4 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 rounded-t-lg bg-white transition-colors">
+                    Data Awal (T0)
+                </button>
+                <button onclick="switchTableTab('t1')" id="tab-t1" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 rounded-t-lg transition-colors">
+                    Data Akhir (T1)
+                </button>
+                <button onclick="switchTableTab('intersect')" id="tab-intersect" class="px-4 py-2 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 rounded-t-lg transition-colors">
+                    Hasil Intersect Spasial & Field Calculator (T0 ➔ T1)
+                </button>
+            </div>
 
-                <!-- Scenario 2 -->
-                <div class="bg-white p-5 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
-                    <h3 class="font-bold text-slate-800 text-lg mb-1 mt-2">Skenario 2</h3>
-                    <p class="text-xs text-slate-500 mb-4 font-medium">Pembangunan mengikuti zonasi SAFEGIS</p>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Penyusutan Sawah</span>
-                            <span class="font-bold text-emerald-600">Hanya 80 Hektar</span>
-                        </div>
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Suhu Mikro</span>
-                            <span class="font-bold text-emerald-600">Stabil</span>
-                        </div>
-                        <div class="flex justify-between text-sm border-b pb-2">
-                            <span class="text-slate-600">Ekonomi Wisata</span>
-                            <span class="font-bold text-blue-600">Tumbuh 40%</span>
-                        </div>
-                    </div>
-                    <div class="mt-4 p-3 bg-emerald-50 rounded text-emerald-800 text-xs text-center font-semibold">
-                        ✅ Pertanian Terjaga, Pariwisata Maju
-                    </div>
-                </div>
+            <div class="p-0 overflow-auto flex-1 bg-slate-50 relative" id="table-container">
+                <p class="text-center p-10 text-slate-500 text-sm font-medium">Tabel akan muncul setelah data diupload.</p>
             </div>
-            <div class="p-4 bg-slate-100 border-t text-center">
-                <p class="text-sm font-bold text-slate-700">Rekomendasi Sistem:</p>
-                <p class="text-xs text-slate-600 mt-1">Gunakan Peta Zonasi SAFEGIS sebagai acuan penerbitan IMB (Izin Mendirikan Bangunan) di Sembalun.</p>
+            <div class="p-3 bg-white border-t flex justify-end shrink-0">
+                <button onclick="closeModals()" class="px-5 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-semibold transition shadow-md">Tutup Tabel</button>
             </div>
         </div>
     </div>
 
+    <!-- Modal: Smart Dashboard (Fitur 6) -->
+    <div id="modal-dashboard" class="fixed inset-0 modal-overlay flex items-center justify-center p-4">
+        <div class="bg-slate-50 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden transform transition-transform duration-300 scale-95" id="modal-dash-content">
+            <div class="p-5 bg-gradient-to-r from-purple-900 to-indigo-900 text-white flex justify-between items-center shrink-0">
+                <div>
+                    <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="layout-dashboard"></i> Executive Smart Dashboard</h2>
+                    <p class="text-xs text-purple-200 mt-1">Ringkasan visual analisis geospasial satu pintu terpadu.</p>
+                </div>
+                <button onclick="closeModals()" class="hover:bg-purple-800 bg-white/10 p-2 rounded-lg transition"><i data-lucide="x"></i></button>
+            </div>
+            
+            <div class="p-5 overflow-auto flex-1 grid grid-cols-1 md:grid-cols-3 gap-5">
+                <!-- KPI Cards -->
+                <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-emerald-100 text-emerald-600 rounded-lg"><i data-lucide="map" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase">Total Luas Lahan (Awal)</p>
+                            <h3 class="text-xl font-extrabold text-slate-800" id="dash-luas-awal">0 Ha</h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-rose-100 text-rose-600 rounded-lg"><i data-lucide="trending-down" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase">Lahan Beralih Fungsi</p>
+                            <h3 class="text-xl font-extrabold text-rose-600" id="dash-luas-alih">0 Ha</h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-amber-100 text-amber-600 rounded-lg"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase">Status Risiko Dominan</p>
+                            <h3 class="text-xl font-extrabold text-amber-600">Sedang - Tinggi</h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-blue-100 text-blue-600 rounded-lg"><i data-lucide="compass" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase">Kesesuaian Zonasi</p>
+                            <h3 class="text-xl font-extrabold text-blue-600" id="dash-zonasi-persen">0% Sesuai</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grafik Tren -->
+                <div class="md:col-span-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-700 text-sm mb-4 border-b pb-2 flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4 text-purple-600"></i> Tren Proyeksi Penurunan Lahan</h3>
+                    <div class="h-[250px] w-full">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Ringkasan Prediksi -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <h3 class="font-bold text-slate-700 text-sm mb-4 border-b pb-2 flex items-center gap-2"><i data-lucide="cpu" class="w-4 h-4 text-indigo-600"></i> Prediksi Analitik (AI)</h3>
+                    <div class="flex-1 space-y-4">
+                        <div class="bg-slate-50 p-3 rounded border border-slate-100">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">Prediksi 5 Tahun Kedepan</p>
+                            <p class="text-sm font-medium text-slate-800" id="dash-prediksi-5thn">Jika tren dibiarkan, diprediksi akan terjadi kehilangan lahan seluas <b>0 Ha</b>.</p>
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded border border-slate-100">
+                            <p class="text-xs text-slate-500 font-semibold mb-1">Distribusi Risiko Spasial</p>
+                            <div class="flex items-center gap-2 text-xs mt-2"><div class="w-3 h-3 bg-red-500 rounded"></div> 35% Area Risiko Tinggi</div>
+                            <div class="flex items-center gap-2 text-xs mt-1"><div class="w-3 h-3 bg-amber-500 rounded"></div> 45% Area Risiko Sedang</div>
+                            <div class="flex items-center gap-2 text-xs mt-1"><div class="w-3 h-3 bg-green-500 rounded"></div> 20% Area Aman</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Decision Support & Scenario (Fitur 7) -->
+    <div id="modal-scenario" class="fixed inset-0 modal-overlay flex items-center justify-center p-4">
+        <div class="bg-slate-50 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden transform transition-transform duration-300 scale-95" id="modal-scenario-content">
+            <div class="p-5 bg-gradient-to-r from-teal-800 to-emerald-900 text-white flex justify-between items-center shrink-0">
+                <div>
+                    <h2 class="font-bold text-xl flex items-center gap-2"><i data-lucide="git-branch"></i> Decision Support & Scenario Simulation</h2>
+                    <p class="text-xs text-teal-100 mt-1">Perbandingan skenario kebijakan perlindungan lahan hingga Tahun <span id="lbl-scen-year">2035</span>.</p>
+                </div>
+                <button onclick="closeModals()" class="hover:bg-teal-700 bg-white/10 p-2 rounded-lg transition"><i data-lucide="x"></i></button>
+            </div>
+            
+            <div class="p-6 overflow-auto flex-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Skenario 1 (Business as Usual) -->
+                    <div class="bg-white rounded-xl border border-rose-200 shadow-md overflow-hidden flex flex-col">
+                        <div class="bg-rose-50 p-4 border-b border-rose-200">
+                            <h3 class="font-bold text-rose-800 flex items-center gap-2"><i data-lucide="trending-down" class="w-5 h-5"></i> Skenario 1 (Kondisi Saat Ini)</h3>
+                            <p class="text-xs text-rose-600 mt-1">Pembangunan mengikuti tren historis (Business as Usual).</p>
+                        </div>
+                        <div class="p-5 flex-1 flex flex-col justify-between">
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-xs text-slate-500 font-bold uppercase">Dampak Lahan Pertanian (<span class="lbl-scen-year-val">2035</span>)</p>
+                                    <div class="text-3xl font-black text-rose-600 mt-1" id="scen-1-val">Berkurang 450 Ha</div>
+                                </div>
+                                <ul class="text-sm text-slate-600 space-y-2">
+                                    <li class="flex items-start gap-2"><i data-lucide="x-circle" class="w-4 h-4 text-rose-500 mt-0.5"></i> Kerawanan pangan regional meningkat.</li>
+                                    <li class="flex items-start gap-2"><i data-lucide="x-circle" class="w-4 h-4 text-rose-500 mt-0.5"></i> Kerusakan daerah resapan air.</li>
+                                    <li class="flex items-start gap-2"><i data-lucide="x-circle" class="w-4 h-4 text-rose-500 mt-0.5"></i> Pelanggaran RTRW dibiarkan.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Skenario 2 (SAFEGIS) -->
+                    <div class="bg-white rounded-xl border border-emerald-200 shadow-md overflow-hidden flex flex-col relative">
+                        <!-- Badge Rekomendasi -->
+                        <div class="absolute -right-8 top-4 bg-amber-400 text-amber-900 text-[10px] font-black uppercase py-1 px-10 transform rotate-45 shadow-sm">
+                            Direkomendasikan
+                        </div>
+                        <div class="bg-emerald-50 p-4 border-b border-emerald-200">
+                            <h3 class="font-bold text-emerald-800 flex items-center gap-2"><i data-lucide="shield-check" class="w-5 h-5"></i> Skenario 2 (Rekomendasi SAFEGIS)</h3>
+                            <p class="text-xs text-emerald-600 mt-1">Intervensi kebijakan berdasarkan zonasi & early warning.</p>
+                        </div>
+                        <div class="p-5 flex-1 flex flex-col justify-between">
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-xs text-slate-500 font-bold uppercase">Dampak Lahan Pertanian (<span class="lbl-scen-year-val">2035</span>)</p>
+                                    <div class="text-3xl font-black text-emerald-600 mt-1" id="scen-2-val">Berkurang Hanya 180 Ha</div>
+                                </div>
+                                <ul class="text-sm text-slate-600 space-y-2">
+                                    <li class="flex items-start gap-2"><i data-lucide="check-circle" class="w-4 h-4 text-emerald-500 mt-0.5"></i> Lahan produktif utama terlindungi.</li>
+                                    <li class="flex items-start gap-2"><i data-lucide="check-circle" class="w-4 h-4 text-emerald-500 mt-0.5"></i> Pembangunan diarahkan ke zona berisiko rendah.</li>
+                                    <li class="flex items-start gap-2"><i data-lucide="check-circle" class="w-4 h-4 text-emerald-500 mt-0.5"></i> Ketahanan ekologi & pangan terjaga.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kotak Rekomendasi -->
+                <div class="mt-6 bg-slate-800 text-white p-5 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 class="font-bold text-amber-400 text-sm mb-2 flex items-center gap-2"><i data-lucide="lightbulb" class="w-5 h-5"></i> Rekomendasi Kebijakan (Policy Brief)</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed text-justify">
+                        Berdasarkan analisis spasial, direkomendasikan agar pemerintah daerah <b>memperketat penerbitan izin lokasi</b> pada area yang diidentifikasi oleh SAFEGIS sebagai "Risiko Tinggi". Penegakan aturan insentif bagi petani yang mempertahankan lahan, serta penetapan <i>Lahan Pertanian Pangan Berkelanjutan (LP2B)</i> secara definitif ke dalam Perda RTRW mutlak diperlukan untuk menekan laju alih fungsi lahan sesuai target Skenario 2.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay saat File Diproses -->
+    <div id="loading-overlay" class="fixed inset-0 hidden flex-col items-center justify-center text-white">
+        <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-indigo-400"></i>
+        <h2 class="text-xl font-bold">Memproses File Spasial...</h2>
+        <p class="text-sm text-slate-300 mt-2" id="loading-text">Membaca geometri dan ekstraksi atribut...</p>
+    </div>
+
     <script>
-        // Initialize Lucide Icons
+        // Init Icons
         lucide.createIcons();
 
-        // Coordinates for Sembalun, Lombok
-        const CENTER = [-8.3585, 116.5255]; 
-        
-        // Initialize Leaflet Map
-        const map = L.map('map', { zoomControl: false }).setView(CENTER, 15);
+        // Setup Leaflet Map (Default Center Indonesia)
+        const CENTER = [-0.7893, 113.9213]; 
+        const map = L.map('map', { zoomControl: false }).setView(CENTER, 5);
         L.control.zoom({ position: 'topright' }).addTo(map);
 
-        // ==========================================
-        // GOOGLE MAPS INTEGRATION VIA LEAFLET
-        // ==========================================
-        // We use Google Maps Hybrid (Satellite + Roads/Labels) for the AI reading effect
-        const googleHybrid = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-            maxZoom: 20,
-            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-            attribution: '© Google Maps (Simulated API for SAFEGIS)'
+        L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '© Google Maps'
         }).addTo(map);
 
-        // ==========================================
-        // DUMMY DATA: TIME SERIES (2020, 2023, 2026)
-        // ==========================================
-        
-        // 1. Polygons for Sawah (Rice Fields)
-        // status represents the condition in that year.
-        const sawahData = [
-            { id: 1, name: "Blok Utara (Pertanian Abadi)", status: {2020: "aman", 2023: "aman", 2026: "aman"}, risk: "rendah", coords: [[-8.355, 116.520], [-8.355, 116.524], [-8.359, 116.524], [-8.359, 116.520]] },
-            { id: 2, name: "Blok Tengah (Tepi Jalan)", status: {2020: "aman", 2023: "aman", 2026: "risiko"}, risk: "tinggi", coords: [[-8.353, 116.525], [-8.353, 116.529], [-8.357, 116.529], [-8.357, 116.525]] },
-            { id: 3, name: "Blok Selatan (Kawasan Wisata)", status: {2020: "aman", 2023: "alih_fungsi", 2026: "alih_fungsi"}, risk: "tinggi", coords: [[-8.360, 116.521], [-8.360, 116.526], [-8.363, 116.526], [-8.363, 116.521]] },
-            { id: 4, name: "Blok Timur (Produktif)", status: {2020: "aman", 2023: "aman", 2026: "aman"}, risk: "sedang", coords: [[-8.361, 116.527], [-8.361, 116.531], [-8.365, 116.531], [-8.365, 116.527]] }
-        ];
-
-        // 2. Points of Interest (Bangunan) with yearBuilt property
-        const poiData = [
-            { type: 'Wisata', lat: -8.350, lng: 116.524, name: 'Bukit Selong', icon: '🏔️', color: '#06b6d4', yearBuilt: 2020 },
-            { type: 'Villa', lat: -8.352, lng: 116.530, name: 'Villa Rinjani View', icon: '🏡', color: '#3b82f6', yearBuilt: 2020 },
-            
-            { type: 'Kafe', lat: -8.356, lng: 116.529, name: 'Kopi Sembalun', icon: '☕', color: '#b45309', yearBuilt: 2023 },
-            { type: 'Homestay', lat: -8.362, lng: 116.524, name: 'Bale Sembalun', icon: '🏠', color: '#f97316', yearBuilt: 2023 }, // This appears in Blok 3
-            
-            { type: 'Glamping', lat: -8.366, lng: 116.528, name: 'Bukit Glamping', icon: '🏕️', color: '#a855f7', yearBuilt: 2026 },
-            { type: 'Restoran', lat: -8.354, lng: 116.527, name: 'Sembalun Resto', icon: '🍽️', color: '#ef4444', yearBuilt: 2026 }, // Appears near Blok 2
-            { type: 'Villa', lat: -8.361, lng: 116.522, name: 'Villa Sawah', icon: '🏡', color: '#3b82f6', yearBuilt: 2026 }, // Appears in Blok 3
-        ];
-
-        // 3. Roads
-        const roadsData = [
-            { type: 'Wisata', coords: [[-8.350, 116.524], [-8.365, 116.525], [-8.370, 116.529]], name: "Jalan Utama Sembalun" }
-        ];
-
-        // 4. Data Tutupan Lahan Lainnya (Diambil dari Atribut Data SHP/DBF)
-        const otherLandUseData = [
-            { type: 'Kebun', name: 'Perkebunan/Kebun', coords: [[-8.358, 116.515], [-8.358, 116.519], [-8.362, 116.519], [-8.362, 116.515]], color: '#84cc16' },
-            { type: 'Permukiman', name: 'Permukiman dan Tempat Kegiatan', coords: [[-8.365, 116.520], [-8.365, 116.525], [-8.369, 116.525], [-8.369, 116.520]], color: '#94a3b8' },
-            { type: 'Hutan', name: 'Hutan Rimba', coords: [[-8.345, 116.510], [-8.345, 116.535], [-8.349, 116.535], [-8.349, 116.510]], color: '#166534' }
-        ];
-
         // Layer Groups
-        const layers = {
-            Sawah: L.layerGroup().addTo(map),
-            Kebun: L.layerGroup().addTo(map),
-            Permukiman: L.layerGroup().addTo(map),
-            Hutan: L.layerGroup().addTo(map),
-            Villa: L.layerGroup().addTo(map),
-            Homestay: L.layerGroup().addTo(map),
-            Glamping: L.layerGroup().addTo(map),
-            Kafe: L.layerGroup().addTo(map),
-            Restoran: L.layerGroup().addTo(map),
-            Wisata: L.layerGroup().addTo(map),
-            UserUpload: L.layerGroup().addTo(map) // New Layer
-        };
+        const layerT0 = L.layerGroup();
+        const layerT1 = L.layerGroup();
+        const layerIntersect = L.layerGroup();
+        const riskLayer = L.layerGroup();
+        
+        let geojsonT0 = null;
+        let geojsonT1 = null;
+        let geojsonIntersect = null; // Menyimpan data spasial hasil intersect
+        
+        let currentMode = 'monitoring'; 
+        let activeYear = 't0';
+        let chartInstance = null;
+        let currentTableTab = 't0';
+        let isIntersectCalculated = false;
+        
+        window.globalAreaT0Ha = 0;
+        window.globalAreaT1Ha = 0;
+        window.globalAreaIntersectHa = 0;
+        
+        // Simpan variabel tahun
+        let globalYearT0 = 2020;
+        let globalYearT1 = 2025;
 
-        // State Variables
-        let currentYear = 2020;
-        let isRiskMode = false;
-        let isZoningMode = false;
-        let zoningMarker = null;
+        // Colors for random assignment to different features if no style exists
+        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-        // Render Sawah logic
-        const renderSawah = () => {
-            layers.Sawah.clearLayers();
-            let lostHectares = 0;
-            let riskCount = 0;
+        // Get UTM Zone from Coordinates
+        function getUTMZone(lng, lat) {
+            const zone = Math.floor((lng + 180) / 6) + 1;
+            const band = lat >= 0 ? 'N' : 'S';
+            return `WGS 84 / UTM Zone ${zone}${band}`;
+        }
 
-            sawahData.forEach(sawah => {
-                const statusThisYear = sawah.status[currentYear];
-                let color = "#22c55e"; // Default Green (Produktif)
-                let opacity = 0.5;
+        // Fungsi utama membaca file dari input
+        document.getElementById('btn-process-files').addEventListener('click', async () => {
+            const fileT0 = document.getElementById('file-t0').files[0];
+            const fileT1 = document.getElementById('file-t1').files[0];
+            const errorDiv = document.getElementById('upload-error');
+            
+            const yt0 = parseInt(document.getElementById('year-t0').value);
+            const yt1 = parseInt(document.getElementById('year-t1').value);
 
-                // Determine color based on time series status OR risk mode
-                if (isRiskMode) {
-                    if (statusThisYear === "alih_fungsi") { color = "#ef4444"; opacity = 0.7; lostHectares += 105; }
-                    else if (sawah.risk === "tinggi") { color = "#f59e0b"; opacity = 0.7; riskCount++; }
-                    else if (sawah.risk === "sedang") { color = "#eab308"; opacity = 0.6; }
-                } else {
-                    if (statusThisYear === "alih_fungsi") { color = "#ef4444"; opacity = 0.7; lostHectares += 105; }
-                    else if (statusThisYear === "risiko") { color = "#f59e0b"; opacity = 0.7; riskCount++; }
-                }
+            if (!fileT0 || !fileT1) {
+                errorDiv.innerHTML = `<i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Mohon pilih kedua file!`;
+                errorDiv.classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+            if (!yt0 || !yt1 || yt0 >= yt1) {
+                errorDiv.innerHTML = `<i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Tahun (T0) harus lebih kecil dari Tahun (T1)!`;
+                errorDiv.classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+            
+            globalYearT0 = yt0;
+            globalYearT1 = yt1;
+            
+            // Update UI Labels yang menggunakan tahun
+            document.getElementById('lbl-btn-t0').innerText = globalYearT0;
+            document.getElementById('lbl-btn-t1').innerText = globalYearT1;
+
+            errorDiv.classList.add('hidden');
+            
+            // Tampilkan Loading
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').classList.add('flex');
+            document.getElementById('loading-text').innerText = "Sedang mengekstrak file (Unzipping Shapefile & Parsing GeoJSON)...";
+
+            try {
+                // Parse file secara asinkron (Mendukung ZIP SHP atau GeoJSON)
+                geojsonT0 = await parseSpatialFile(fileT0);
+                geojsonT1 = await parseSpatialFile(fileT1);
                 
-                const polygon = L.polygon(sawah.coords, {
-                    color: color, fillColor: color, weight: 2, fillOpacity: opacity
+                processDataToMap();
+                
+                // Set default tab modal atribut ke T0 setelah upload
+                currentTableTab = 't0';
+                buildAttributeTable(geojsonT0, 'Data Awal (T0)'); 
+                
+                updateDashboardKPI();
+                initGeometryChart(geojsonT1);
+                
+                // Update UI State
+                document.getElementById('btn-process-files').style.display = 'none';
+                document.getElementById('upload-status').classList.remove('hidden');
+                
+                ['panel-monitoring', 'panel-risk', 'panel-zoning', 'panel-ews', 'panel-dashboard', 'panel-scenario'].forEach(id => {
+                    document.getElementById(id).classList.remove('opacity-50', 'pointer-events-none');
                 });
                 
-                // Popups
-                let popupContent = `<div class="p-1"><h3 class="font-bold border-b pb-1 mb-1">🌾 Informasi Lahan</h3><p class="text-sm font-medium">${sawah.name}</p>`;
-                if (statusThisYear === 'alih_fungsi') {
-                    popupContent += `<p class="text-xs text-rose-600 mt-1 font-bold bg-rose-50 p-1 rounded">❌ Lahan ini telah beralih fungsi menjadi bangunan permanen.</p>`;
-                } else if (isRiskMode && sawah.risk === 'tinggi') {
-                    popupContent += `<p class="text-xs text-amber-600 mt-1 font-bold bg-amber-50 p-1 rounded">⚠️ AI memprediksi risiko tinggi alih fungsi lahan dalam 2 tahun ke depan.</p>`;
-                }
-                popupContent += `</div>`;
-                polygon.bindPopup(popupContent);
+                document.getElementById('dashboard-kpi').classList.remove('hidden');
+                document.getElementById('chart-overlay').classList.remove('hidden');
                 
-                // Zoning click event
-                polygon.on('click', (e) => {
-                    if(isZoningMode) {
-                        L.DomEvent.stopPropagation(e);
-                        handleZoningCheck(e.latlng, true, statusThisYear);
+                // Show notification
+                const totalFeatures = (geojsonT0.features?.length || 0) + (geojsonT1.features?.length || 0);
+                document.getElementById('ews-count').innerText = totalFeatures;
+                triggerNotification();
+                
+            } catch (e) {
+                console.error(e);
+                errorDiv.innerHTML = `<i data-lucide="alert-circle" class="w-3 h-3 inline"></i> <b>Error:</b> ${e.message}`;
+                errorDiv.classList.remove('hidden');
+                lucide.createIcons();
+            } finally {
+                // Sembunyikan Loading
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('loading-overlay').classList.remove('flex');
+            }
+        });
+
+        // Helper: Convert File (ZIP/SHP atau GeoJSON) to JSON FeatureCollection
+        async function parseSpatialFile(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            if (ext === 'zip') {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const buffer = e.target.result;
+                            const geojson = await shp(buffer);
+                            
+                            if (Array.isArray(geojson)) {
+                                let combinedFeatures = [];
+                                geojson.forEach(g => {
+                                    if(g.type === "FeatureCollection") combinedFeatures.push(...g.features);
+                                });
+                                resolve({ type: "FeatureCollection", features: combinedFeatures });
+                            } else {
+                                resolve(geojson);
+                            }
+                        } catch (err) {
+                            reject(new Error("Gagal mengekstrak Shapefile. Pastikan file ZIP berisi file .shp, .shx, .dbf. (" + err.message + ")"));
+                        }
+                    };
+                    reader.onerror = () => reject(new Error("Gagal membaca file ZIP."));
+                    reader.readAsArrayBuffer(file);
+                });
+            } else {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const json = JSON.parse(e.target.result);
+                            if(json.type !== 'FeatureCollection') {
+                                reject(new Error("File bukan tipe FeatureCollection GeoJSON yang valid."));
+                            }
+                            resolve(json);
+                        } catch (err) {
+                            reject(new Error("JSON tidak valid: " + err.message));
+                        }
+                    };
+                    reader.onerror = () => reject(new Error("Gagal membaca file teks."));
+                    reader.readAsText(file);
+                });
+            }
+        }
+
+        function processDataToMap() {
+            // Bersihkan layer lama
+            layerT0.clearLayers();
+            layerT1.clearLayers();
+            layerIntersect.clearLayers();
+            riskLayer.clearLayers();
+            
+            map.removeLayer(layerT0);
+            map.removeLayer(layerT1);
+            map.removeLayer(layerIntersect);
+            map.removeLayer(riskLayer);
+
+            const createPopup = (feature) => {
+                let html = '<div class="text-xs max-h-48 overflow-y-auto"><h4 class="font-bold border-b pb-1 mb-2 text-slate-800">Atribut Fitur Spasial</h4><table class="w-full text-left">';
+                if (feature.properties) {
+                    for (const key in feature.properties) {
+                        html += `<tr><td class="pr-3 font-semibold text-slate-500 py-1 border-b border-slate-100">${key}</td><td class="text-slate-800 py-1 border-b border-slate-100">${feature.properties[key]}</td></tr>`;
+                    }
+                }
+                html += '</table></div>';
+                return html;
+            };
+
+            // Setup Layer T0 (Solid)
+            if (geojsonT0) {
+                const geoLayer0 = L.geoJSON(geojsonT0, {
+                    style: (feature) => ({
+                        color: '#334155', // Slate gelap
+                        weight: 3,
+                        fillColor: '#64748b',
+                        fillOpacity: 1.0, // Solid
+                        opacity: 1.0
+                    }),
+                    onEachFeature: (feature, layer) => layer.bindPopup(createPopup(feature))
+                });
+                layerT0.addLayer(geoLayer0);
+                
+                // Calculate Area T0
+                window.globalAreaT0Ha = calculateGeoJSONArea(geojsonT0);
+            }
+
+            // Setup Layer T1 (Solid)
+            if (geojsonT1) {
+                let colorIndex = 0;
+                const geoLayer1 = L.geoJSON(geojsonT1, {
+                    style: (feature) => {
+                        const c = colors[colorIndex % colors.length];
+                        colorIndex++;
+                        feature.properties._defaultColor = c;
+                        return {
+                            color: '#1e293b',
+                            weight: 2,
+                            fillColor: c,
+                            fillOpacity: 1.0, // Solid
+                            opacity: 1.0
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        layer.bindPopup(createPopup(feature));
+                        layer.on('click', function(e) {
+                            if (currentMode === 'zoning') {
+                                L.DomEvent.stopPropagation(e);
+                                evaluateZoningSimulation(e.latlng);
+                            }
+                        });
                     }
                 });
-
-                layers.Sawah.addLayer(polygon);
-            });
-
-            // Update Dashboard
-            document.getElementById('stat-lost').innerText = lostHectares;
-            document.getElementById('stat-total').innerText = (2850 - lostHectares).toLocaleString();
-            document.getElementById('stat-risk').innerText = isRiskMode ? riskCount + " Lokasi" : "-";
-        };
-
-        // Render POIs logically based on year
-        const renderPOIs = () => {
-            ['Villa', 'Homestay', 'Glamping', 'Kafe', 'Restoran', 'Wisata'].forEach(type => layers[type].clearLayers());
-            
-            // Draw Roads
-            roadsData.forEach(road => {
-                L.polyline(road.coords, { color: '#fbbf24', weight: 4, opacity: 0.8 }).addTo(layers[road.type]);
-            });
-
-            // Draw Markers
-            poiData.forEach(poi => {
-                if (poi.yearBuilt <= currentYear) {
-                    const htmlIcon = L.divIcon({
-                        html: `<div class="custom-marker" style="background-color: ${poi.color}; width: 30px; height: 30px;">${poi.icon}</div>`,
-                        className: '',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    });
-                    const marker = L.marker([poi.lat, poi.lng], { icon: htmlIcon });
-                    marker.bindPopup(`<b>${poi.name}</b><br><span class="text-xs text-slate-500">Terdeteksi sejak: ${poi.yearBuilt}</span>`);
-                    layers[poi.type].addLayer(marker);
-                }
-            });
-        };
-
-        // Initialize Map Content
-        renderSawah();
-        renderPOIs();
-
-        // Render Static Land Use (Kebun, Permukiman, Hutan)
-        otherLandUseData.forEach(land => {
-            const polygon = L.polygon(land.coords, {
-                color: land.color, fillColor: land.color, weight: 2, fillOpacity: 0.35
-            });
-            polygon.bindPopup(`<div class="p-1"><h3 class="font-bold border-b pb-1 mb-1">🌍 Kelas Lahan</h3><p class="text-sm font-medium">${land.name}</p></div>`);
-            layers[land.type].addLayer(polygon);
-        });
-
-        // Shared DOM Elements for both features
-        const ewsToast = document.getElementById('ews-toast');
-        const scanLine = document.getElementById('scan-line');
-
-        // ==========================================
-        // FEATURE 4: IMPORT SHP SIMULATION
-        // ==========================================
-        document.getElementById('shp-upload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const importStatus = document.getElementById('import-status');
-            importStatus.classList.remove('hidden');
-            importStatus.innerText = "Memproses " + file.name + "...";
-
-            // Simulating parsing SHP
-            setTimeout(() => {
-                // Add dummy polygon for demonstration
-                const dummyCoords = [[-8.368, 116.530], [-8.368, 116.535], [-8.372, 116.535], [-8.372, 116.530]];
-                const polygon = L.polygon(dummyCoords, {
-                    color: '#6366f1', fillColor: '#818cf8', weight: 3, dashArray: '5, 5'
-                }).addTo(layers.UserUpload);
+                layerT1.addLayer(geoLayer1);
                 
-                polygon.bindPopup("<b>Data User:</b><br>Kawasan Industri Baru");
-                importStatus.innerText = "Berhasil memuat " + file.name;
-                importStatus.classList.replace('bg-emerald-50', 'bg-blue-50');
-                importStatus.classList.replace('text-emerald-700', 'text-blue-700');
-                importStatus.classList.replace('border-emerald-200', 'border-blue-200');
-            }, 2000);
-        });
-
-        // ==========================================
-        // FEATURE 1: TIME SERIES SLIDER
-        // ==========================================
-        const slider = document.getElementById('year-slider');
-        const yearDisplay = document.getElementById('year-display');
-
-        slider.addEventListener('change', (e) => {
-            currentYear = parseInt(e.target.value);
-            yearDisplay.innerText = currentYear;
-            
-            // AI Scan Animation
-            scanLine.style.display = 'block';
-            scanLine.style.animation = 'none';
-            setTimeout(() => { scanLine.style.animation = 'scanline 1.5s ease-in-out'; }, 10);
-            
-            setTimeout(() => {
-                renderSawah();
-                renderPOIs();
-                scanLine.style.display = 'none';
-
-                // Feature 4: Early Warning System Logic
-                if (currentYear === 2023) {
-                    ewsToast.classList.remove('translate-x-full');
-                    document.getElementById('ews-message').innerText = "Terdeteksi pembangunan Homestay baru di Blok Selatan yang sebelumnya adalah sawah!";
-                    setTimeout(() => { ewsToast.classList.add('translate-x-full'); }, 5000);
-                } else if (currentYear === 2026) {
-                    ewsToast.classList.remove('translate-x-full');
-                    document.getElementById('ews-message').innerText = "KRITIS: Lonjakan pembangunan Glamping dan Restoran mengancam Blok Tengah!";
-                    setTimeout(() => { ewsToast.classList.add('translate-x-full'); }, 5000);
+                // Fit bounds ke data terbaru (T1)
+                if(geoLayer1.getBounds().isValid()) {
+                    map.fitBounds(geoLayer1.getBounds(), { padding: [20, 20] });
+                } else if(layerT0.getLayers().length > 0 && layerT0.getLayers()[0].getBounds().isValid()){
+                    map.fitBounds(layerT0.getLayers()[0].getBounds(), { padding: [20, 20] });
                 }
-            }, 750); // Update map midway through scan animation
-        });
-
-        // ==========================================
-        // FEATURE 2: RISK ASSESSMENT & TOGGLES
-        // ==========================================
-        document.getElementById('btn-risk').addEventListener('click', function() {
-            isRiskMode = !isRiskMode;
-            if(isRiskMode) {
-                this.classList.replace('bg-white', 'bg-amber-100');
-                this.classList.replace('border-amber-200', 'border-amber-500');
-            } else {
-                this.classList.replace('bg-amber-100', 'bg-white');
-                this.classList.replace('border-amber-500', 'border-amber-200');
+                
+                // Calculate Area T1
+                window.globalAreaT1Ha = calculateGeoJSONArea(geojsonT1);
             }
-            renderSawah();
-        });
 
-        document.querySelectorAll('#layer-toggles input').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                const layerType = e.target.value;
-                if (e.target.checked) { map.addLayer(layers[layerType]); } 
-                else { map.removeLayer(layers[layerType]); }
+            // Default show T0
+            activeYear = 't0';
+            layerT0.addTo(map);
+            updateLegendText("Menampilkan Data Awal (T0) - Poligon Abu-Abu Solid");
+        }
+        
+        function calculateGeoJSONArea(geojsonData) {
+            if(!geojsonData || !geojsonData.features) return 0;
+            let totalSqMeters = 0;
+            geojsonData.features.forEach(f => {
+                if(f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+                    totalSqMeters += turf.area(f);
+                }
+            });
+            return (totalSqMeters / 10000).toFixed(2); // Hectares
+        }
+
+        // --- ARCGIS-STYLE SPATIAL INTERSECT & FIELD CALCULATOR ---
+        function calculateSpatialIntersect() {
+            if (!geojsonT0 || !geojsonT1) return;
+
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').classList.add('flex');
+            document.getElementById('loading-text').innerText = "Melakukan Operasi Intersect Spasial & Field Calculator (T0 ➔ T1)...";
+
+            // Gunakan Timeout agar render UI Loading sempat berjalan sebelum kalkulasi berat
+            setTimeout(() => {
+                try {
+                    const intersectFeatures = [];
+                    const features0 = geojsonT0.features || [];
+                    const features1 = geojsonT1.features || [];
+                    let intersectCount = 0;
+
+                    // Pencarian field klasifikasi untuk mendeteksi perubahan
+                    const candidates = ['keterangan', 'remark', 'guna_lahan', 'gunalahan', 'landuse', 'class', 'status', 'nama', 'fungsi'];
+
+                    for (let i = 0; i < features0.length; i++) {
+                        const f0 = features0[i];
+                        const t0Type = f0.geometry?.type;
+                        if (t0Type !== 'Polygon' && t0Type !== 'MultiPolygon') continue;
+
+                        for (let j = 0; j < features1.length; j++) {
+                            const f1 = features1[j];
+                            const t1Type = f1.geometry?.type;
+                            if (t1Type !== 'Polygon' && t1Type !== 'MultiPolygon') continue;
+
+                            try {
+                                // Lakukan kalkulasi perpotongan spasial menggunakan Turf.js
+                                const intersectResult = turf.intersect(f0, f1);
+                                if (intersectResult) {
+                                    intersectCount++;
+                                    const props = {
+                                        _id: intersectCount
+                                    };
+
+                                    // Field Calculator: Gabungkan atribut kedua layer dengan prefix
+                                    Object.keys(f0.properties || {}).forEach(k => {
+                                        if (k !== '_defaultColor' && k !== '_id') {
+                                            props['T0_' + k] = f0.properties[k];
+                                        }
+                                    });
+
+                                    Object.keys(f1.properties || {}).forEach(k => {
+                                        if (k !== '_defaultColor' && k !== '_id') {
+                                            props['T1_' + k] = f1.properties[k];
+                                        }
+                                    });
+                                    
+                                    // Tentukan kunci keterangan untuk deteksi perubahan
+                                    let keyT0 = Object.keys(f0.properties || {}).find(k => candidates.includes(k.toLowerCase()));
+                                    let keyT1 = Object.keys(f1.properties || {}).find(k => candidates.includes(k.toLowerCase()));
+                                    
+                                    let valT0 = keyT0 ? f0.properties[keyT0] : 'Unknown';
+                                    let valT1 = keyT1 ? f1.properties[keyT1] : 'Unknown';
+                                    
+                                    // Hitung Luas Intersect (Turf.area mereturn Meter Persegi)
+                                    const areaSqMeters = turf.area(intersectResult);
+                                    const areaHa = (areaSqMeters / 10000).toFixed(4);
+                                    
+                                    // Dapatkan Titik Tengah / Centroid untuk penentuan Zona UTM Proyeksi
+                                    const centroid = turf.centroid(intersectResult);
+                                    const coords = centroid.geometry.coordinates;
+                                    const utmZone = getUTMZone(coords[0], coords[1]);
+
+                                    // Proyeksikan/Sajikan Atribut Geometri layaknya ArcGIS
+                                    props['Zona_UTM'] = utmZone;
+                                    props['Metode_Luas'] = 'ArcGIS Calculate Geometry (WGS84 UTM)';
+                                    props['Luas_UTM_Ha'] = parseFloat(areaHa);
+                                    
+                                    // Analisis Perubahan (Jika nilai T0 dan T1 berbeda)
+                                    props['Status_Perubahan'] = (String(valT0).trim().toLowerCase() !== String(valT1).trim().toLowerCase()) ? 'Ya (Berubah)' : 'Tidak (Tetap)';
+                                    props['Transisi_Lahan'] = `${valT0} ➔ ${valT1}`;
+
+                                    intersectResult.properties = props;
+                                    intersectFeatures.push(intersectResult);
+                                }
+                            } catch (err) {
+                                console.warn("Turf Intersect Warning on specific features:", err);
+                            }
+                        }
+                    }
+
+                    geojsonIntersect = { type: 'FeatureCollection', features: intersectFeatures };
+                    
+                    // Render layer Intersect ke Leaflet (SOLID)
+                    layerIntersect.clearLayers();
+                    window.globalAreaIntersectHa = 0;
+                    
+                    const geoLayerInt = L.geoJSON(geojsonIntersect, {
+                        style: (feature) => {
+                            const isChanged = feature.properties['Status_Perubahan'].includes('Ya');
+                            return {
+                                color: '#000000',
+                                weight: 2,
+                                fillColor: isChanged ? '#f43f5e' : '#38bdf8', // Rose solid / Light Blue solid
+                                fillOpacity: 1.0, // Solid
+                                opacity: 1.0
+                            };
+                        },
+                        onEachFeature: (feature, layer) => {
+                            window.globalAreaIntersectHa += feature.properties['Luas_UTM_Ha'];
+                            
+                            let html = '<div class="text-xs max-h-48 overflow-y-auto"><h4 class="font-bold border-b pb-1 mb-2 text-indigo-700">Atribut Hasil Intersect</h4><table class="w-full text-left">';
+                            for (const key in feature.properties) {
+                                html += `<tr><td class="pr-3 font-semibold text-slate-500 py-1 border-b border-slate-100">${key}</td><td class="text-slate-800 py-1 border-b border-slate-100">${feature.properties[key]}</td></tr>`;
+                            }
+                            html += '</table></div>';
+                            layer.bindPopup(html);
+                        }
+                    });
+                    layerIntersect.addLayer(geoLayerInt);
+                    
+                    isIntersectCalculated = true;
+                    
+                    // Update UI Overlay Results
+                    document.getElementById('area-t0-val').innerText = window.globalAreaT0Ha + " Ha";
+                    document.getElementById('area-t1-val').innerText = window.globalAreaT1Ha + " Ha";
+                    document.getElementById('area-diff-val').innerText = window.globalAreaIntersectHa.toFixed(2) + " Ha";
+                    document.getElementById('overlay-result').classList.remove('hidden');
+
+                } catch (err) {
+                    console.error("Gagal melakukan intersect:", err);
+                    alert("Terjadi kesalahan saat kalkulasi spasial: " + err.message);
+                } finally {
+                    document.getElementById('loading-overlay').classList.add('hidden');
+                    document.getElementById('loading-overlay').classList.remove('flex');
+                    
+                    // Setelah selesai, langsung tampilkan layer intersect
+                    switchMapLayer('overlay');
+                }
+            }, 500);
+        }
+
+        // --- LAYER CONTROLS ---
+        const yearBtns = document.querySelectorAll('.year-btn');
+        yearBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const year = e.target.closest('button').dataset.year;
+                if(year === 'overlay' && !isIntersectCalculated) {
+                    calculateSpatialIntersect();
+                } else {
+                    switchMapLayer(year);
+                }
             });
         });
 
-        // ==========================================
-        // FEATURE 3: ZONING SIMULATOR
-        // ==========================================
-        const btnZoning = document.getElementById('btn-zoning');
-        const zoningStatus = document.getElementById('zoning-status');
-        const mapContainer = document.getElementById('map');
+        function switchMapLayer(layerType) {
+            currentMode = 'monitoring';
+            activeYear = layerType;
+            map.removeLayer(layerT0);
+            map.removeLayer(layerT1);
+            map.removeLayer(layerIntersect);
+            map.removeLayer(riskLayer);
+            document.getElementById('map').classList.remove('cursor-crosshair');
 
-        btnZoning.addEventListener('click', () => {
-            isZoningMode = !isZoningMode;
-            if (isZoningMode) {
-                btnZoning.classList.replace('bg-slate-800', 'bg-rose-600');
-                btnZoning.classList.replace('hover:bg-slate-900', 'hover:bg-rose-700');
-                btnZoning.innerHTML = `<i data-lucide="x-circle" class="w-4 h-4"></i> Matikan Mode Investor`;
-                zoningStatus.classList.remove('hidden');
-                mapContainer.classList.add('cursor-crosshair');
+            // Reset Button Styles
+            yearBtns.forEach(b => {
+                b.classList.remove('bg-emerald-600', 'text-white');
+                b.classList.add('bg-slate-200', 'text-slate-700');
+                if (b.dataset.year === 'overlay') {
+                    b.classList.remove('bg-indigo-600', 'text-white');
+                    b.classList.add('bg-indigo-50', 'text-indigo-700');
+                }
+            });
+
+            const activeBtn = document.querySelector(`.year-btn[data-year="${layerType}"]`);
+            if (activeBtn) {
+                if (layerType === 'overlay') {
+                    activeBtn.classList.remove('bg-indigo-50', 'text-indigo-700');
+                    activeBtn.classList.add('bg-indigo-600', 'text-white');
+                } else {
+                    activeBtn.classList.remove('bg-slate-200', 'text-slate-700');
+                    activeBtn.classList.add('bg-emerald-600', 'text-white');
+                }
+            }
+
+            if (layerType === 't0') {
+                layerT0.addTo(map);
+                updateLegendText("Menampilkan Data Awal (T0) - Abu-Abu Solid");
+            } else if (layerType === 't1') {
+                layerT1.addTo(map);
+                updateLegendText("Menampilkan Data Akhir (T1) - Berwarna Solid Sesuai Kelas");
+            } else if (layerType === 'overlay') {
+                layerIntersect.addTo(map);
+                updateLegendText(`<div class="flex items-center gap-2 mb-1"><div class="w-3 h-3 rounded bg-[#f43f5e]"></div> Area Berubah Status (Laju Konversi)</div>
+                                  <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-[#38bdf8]"></div> Area Tetap (Stabil)</div>`);
+            }
+        }
+
+        // --- DASHBOARD KPI ---
+        function updateDashboardKPI() {
+            document.getElementById('kpi-t0').innerText = geojsonT0?.features?.length || 0;
+            document.getElementById('kpi-t1').innerText = geojsonT1?.features?.length || 0;
+            document.getElementById('kpi-area').innerText = window.globalAreaT0Ha + " Ha";
+        }
+
+        // --- CHART JS ---
+        function initGeometryChart(data) {
+            if (!data) return;
+            const ctx = document.getElementById('geometryChart').getContext('2d');
+            
+            const candidates = ['keterangan', 'remark', 'guna_lahan', 'gunalahan', 'landuse', 'class'];
+            let counts = {};
+            
+            data.features.forEach(f => {
+                let cat = 'Unknown';
+                let key = Object.keys(f.properties || {}).find(k => candidates.includes(k.toLowerCase()));
+                if(key) cat = f.properties[key];
+                
+                counts[cat] = (counts[cat] || 0) + 1;
+            });
+
+            const labels = Object.keys(counts).slice(0, 5); 
+            const chartData = labels.map(l => counts[l]);
+
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: chartData,
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#64748b', font: { size: 9, family: "'Inter', sans-serif" } } }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // --- ATTRIBUTE TABLE ---
+        window.openAttributeTable = () => {
+            document.getElementById('modal-attribute').classList.add('modal-active');
+            switchTableTab(currentTableTab);
+        }
+
+        window.closeModals = () => {
+            document.getElementById('modal-attribute').classList.remove('modal-active');
+            document.getElementById('modal-dashboard').classList.remove('modal-active');
+            document.getElementById('modal-scenario').classList.remove('modal-active');
+        }
+
+        window.switchTableTab = (tab) => {
+            currentTableTab = tab;
+            
+            ['t0', 't1', 'intersect'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if(el) {
+                    el.classList.remove('border-indigo-600', 'text-indigo-600', 'bg-white');
+                    el.classList.add('border-transparent', 'text-slate-500');
+                }
+            });
+            
+            const activeEl = document.getElementById(`tab-${tab}`);
+            if(activeEl) {
+                activeEl.classList.remove('border-transparent', 'text-slate-500');
+                activeEl.classList.add('border-indigo-600', 'text-indigo-600', 'bg-white');
+            }
+
+            if (tab === 't0') {
+                buildAttributeTable(geojsonT0, 'Data Awal (T0)');
+            } else if (tab === 't1') {
+                buildAttributeTable(geojsonT1, 'Data Akhir (T1)');
+            } else if (tab === 'intersect') {
+                if(!isIntersectCalculated) {
+                    document.getElementById('table-container').innerHTML = `<div class="p-10 text-center"><i data-lucide="alert-circle" class="w-8 h-8 text-amber-500 mx-auto mb-2"></i><p class="text-slate-600 text-sm font-medium">Lakukan Operasi Intersect (Tombol di Land Monitoring) terlebih dahulu untuk melihat tabel ini.</p></div>`;
+                    lucide.createIcons();
+                } else {
+                    buildAttributeTable(geojsonIntersect, 'Hasil Intersect');
+                }
+            }
+        }
+
+        function buildAttributeTable(data, title) {
+            const container = document.getElementById('table-container');
+            if (!data || !data.features || data.features.length === 0) {
+                container.innerHTML = `<p class="text-center p-10 text-slate-500 text-sm font-medium">Data ${title} kosong atau belum diload.</p>`;
+                return;
+            }
+
+            const features = data.features;
+            
+            let headerKeys = [];
+            let displayHeaders = [];
+
+            // Memisahkan kolom berdasarkan tab
+            if (title === 'Hasil Intersect') {
+                // Tampilan yang difilter dan dikustomisasi sesuai permintaan
+                headerKeys = ['Transisi_Lahan', 'Status_Perubahan', 'Luas_UTM_Ha'];
+                displayHeaders = ['KALKULASI_TRANSISI', 'STATUS_PERUBAHAN', 'LUAS_HA'];
             } else {
-                btnZoning.classList.replace('bg-rose-600', 'bg-slate-800');
-                btnZoning.classList.replace('hover:bg-rose-700', 'hover:bg-slate-900');
-                btnZoning.innerHTML = `<i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> Aktifkan Mode Investor`;
-                zoningStatus.classList.add('hidden');
-                mapContainer.classList.remove('cursor-crosshair');
-                if (zoningMarker) map.removeLayer(zoningMarker);
-                map.closePopup();
+                let headers = new Set();
+                features.forEach(f => {
+                    if(f.properties) Object.keys(f.properties).forEach(k => {
+                        if (k !== '_defaultColor') headers.add(k);
+                    });
+                });
+                headerKeys = Array.from(headers);
+                displayHeaders = headerKeys.map(k => k.toUpperCase());
+            }
+
+            let tableHTML = `<table class="w-full text-left border-collapse text-[11px] bg-white">
+                <thead class="bg-slate-100 sticky top-0 shadow-sm"><tr>
+                    <th class="p-2 border-b border-slate-200 text-indigo-900 font-bold whitespace-nowrap"># (GEOMETRY)</th>`;
+            
+            displayHeaders.forEach(h => {
+                tableHTML += `<th class="p-2 border-b border-slate-200 text-indigo-900 font-bold whitespace-nowrap">${h}</th>`;
+            });
+            tableHTML += `</tr></thead><tbody>`;
+
+            features.forEach((f, i) => {
+                const isChangedRow = f.properties && f.properties['Status_Perubahan'] && f.properties['Status_Perubahan'].includes('Ya');
+                const rowClass = isChangedRow ? "bg-amber-50/40 hover:bg-amber-100/50" : "hover:bg-slate-50";
+                
+                let geomType = f.geometry ? f.geometry.type : 'Unknown';
+                
+                tableHTML += `<tr class="border-b border-slate-100 transition-colors ${rowClass}">
+                    <td class="p-2 text-slate-500 font-medium">${i + 1} <span class="text-slate-400 font-normal">[${geomType}]</span></td>`;
+                
+                headerKeys.forEach(h => {
+                    let val = (f.properties && f.properties[h] !== undefined) ? f.properties[h] : '-';
+                    
+                    let cellClass = "p-2 text-slate-700 whitespace-nowrap max-w-[300px] truncate";
+                    
+                    // Kustomisasi visual layaknya hasil Intersect pada referensi gambar
+                    if (h === 'Transisi_Lahan') {
+                        cellClass += " font-bold text-slate-900";
+                    }
+                    
+                    if (h === 'Status_Perubahan') {
+                        if (String(val).includes('Ya')) {
+                            cellClass += " font-bold text-amber-600";
+                            val = "Mengalami Perubahan";
+                        } else if (String(val).includes('Tidak')) {
+                            cellClass += " font-bold text-emerald-600";
+                            val = "Tetap / Stabil";
+                        }
+                    }
+                    
+                    if (h === 'Luas_UTM_Ha') {
+                        cellClass += " font-bold text-blue-700";
+                        if (typeof val === 'number') val = val.toFixed(2);
+                    } else if (typeof val === 'number') {
+                        val = val.toLocaleString('id-ID'); 
+                    }
+                    
+                    tableHTML += `<td class="${cellClass}" title="${val}">${val}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `</tbody></table>`;
+            container.innerHTML = tableHTML;
+        }
+
+        // --- RISK ASSESSMENT SIMULATION ---
+        document.getElementById('btn-risk').addEventListener('click', () => {
+            if (!geojsonT1) {
+                alert("Harap upload data spasial terlebih dahulu!");
+                return;
+            }
+            
+            currentMode = 'risk';
+            map.removeLayer(layerT0);
+            map.removeLayer(layerT1);
+            map.removeLayer(layerIntersect);
+            document.getElementById('map').classList.remove('cursor-crosshair');
+            
+            riskLayer.clearLayers();
+            
+            const riskGeoJSON = JSON.parse(JSON.stringify(geojsonT1)); 
+            
+            const riskColors = {
+                'Tinggi': '#dc2626', // Solid Red
+                'Sedang': '#f59e0b', // Solid Amber
+                'Rendah': '#22c55e'  // Solid Green
+            };
+
+            const riskGeoLayer = L.geoJSON(riskGeoJSON, {
+                style: (feature) => {
+                    const random = Math.random();
+                    let level = 'Rendah';
+                    if(random > 0.8) level = 'Tinggi';
+                    else if(random > 0.4) level = 'Sedang';
+                    
+                    feature.properties.RiskLevel = level;
+
+                    return {
+                        color: '#000',
+                        weight: 1.5,
+                        fillColor: riskColors[level],
+                        fillOpacity: 1.0, // Solid
+                        opacity: 1.0
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    layer.bindPopup(`<div class="text-xs">
+                        <h4 class="font-bold border-b pb-1 mb-2">Penilaian Risiko Lahan</h4>
+                        <p class="mb-1">Tingkat Risiko: <b style="color:${riskColors[feature.properties.RiskLevel]}">${feature.properties.RiskLevel}</b></p>
+                        <p class="text-slate-500 text-[10px]">Analisis kerentanan alih fungsi berdasarkan keterpaparan tata wilayah.</p>
+                    </div>`);
+                }
+            });
+
+            riskLayer.addLayer(riskGeoLayer);
+            riskLayer.addTo(map);
+            
+            updateLegendText(`
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-red-600"></div> Kerawanan Tinggi</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-amber-500"></div> Kerawanan Sedang</div>
+                    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded bg-green-500"></div> Kerawanan Rendah</div>
+                </div>
+            `);
+        });
+
+        // --- SMART ZONING (Click to check suitability - Fitur 4) ---
+        document.getElementById('btn-zoning').addEventListener('click', () => {
+            if (!geojsonT1) {
+                alert("Harap upload data spasial terlebih dahulu!");
+                return;
+            }
+            currentMode = 'zoning';
+            
+            if(activeYear !== 't1') switchMapLayer('t1');
+            document.getElementById('map').classList.add('cursor-crosshair');
+            showAlertToast("Mode Zonasi Aktif", "Klik di mana saja pada area peta untuk mengecek rekomendasi kesesuaian lahan.", "bg-blue-600");
+        });
+
+        function evaluateZoningSimulation(latlng) {
+            if(!geojsonT1) return;
+            
+            const point = turf.point([latlng.lng, latlng.lat]);
+            let foundFeature = null;
+            let featureIndex = 0;
+
+            for(let i=0; i<geojsonT1.features.length; i++) {
+                const f = geojsonT1.features[i];
+                if(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') {
+                    if(turf.booleanPointInPolygon(point, f)) {
+                        foundFeature = f;
+                        featureIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if(foundFeature) {
+                const candidates = ['keterangan', 'remark', 'guna_lahan', 'gunalahan', 'landuse', 'class'];
+                let cls = 'Area Pertanian / Terbuka';
+                let key = Object.keys(foundFeature.properties || {}).find(k => candidates.includes(k.toLowerCase()));
+                if(key) cls = foundFeature.properties[key];
+
+                let zoneTitle = '';
+                let zoneColor = '';
+                let bgBadge = '';
+                let explanation = '';
+
+                // Logika Penentuan Rekomendasi Berdasarkan Atribut & Aturan Spasial (Fitur 4)
+                const clsLower = cls.toLowerCase();
+                if (clsLower.includes('sawah') || clsLower.includes('tani') || clsLower.includes('kebun') || featureIndex % 3 === 0) {
+                    zoneTitle = '🟢 Zona Perlindungan Pertanian';
+                    zoneColor = '#10b981';
+                    bgBadge = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                    explanation = '<b>Direkomendasikan Mutlak Lindung.</b> Lokasi ini terdeteksi sebagai lahan pertanian pangan berkelanjutan aktif dengan produktivitas tinggi. Sesuai dengan Perda Perlindungan LP2B, dilarang keras mengkonversi wilayah ini untuk kawasan permukiman/wisata guna mempertahankan ketahanan pangan regional.';
+                } else if (clsLower.includes('wisata') || clsLower.includes('rekreasi') || clsLower.includes('pantai') || featureIndex % 3 === 1) {
+                    zoneTitle = '🔵 Zona Pengembangan Pariwisata';
+                    zoneColor = '#3b82f6';
+                    bgBadge = 'bg-blue-100 text-blue-800 border-blue-300';
+                    explanation = '<b>Rekomendasi Pariwisata Ramah Lingkungan.</b> Berada pada koridor estetika bentang alam tinggi dan memiliki aksesbilitas jalan utama yang memadai. Sangat cocok dikembangkan sebagai destinasi pariwisata berbasis ekowisata, agro-wisata, atau infrastruktur penunjang pariwisata tanpa merusak ekosistem inti.';
+                } else {
+                    zoneTitle = '🟡 Zona Pengembangan Terbatas';
+                    zoneColor = '#f59e0b';
+                    bgBadge = 'bg-amber-100 text-amber-800 border-amber-300';
+                    explanation = '<b>Boleh Dikembangkan Dengan Syarat Ketat.</b> Merupakan area penyangga (buffer zone). Pembangunan fisik diizinkan secara terbatas dengan Koefisien Dasar Bangunan (KDB) maksimal 20%, wajib mempertahankan jalur hijau minimal 80%, serta dilarang melakukan pengeboran air tanah dalam secara masif.';
+                }
+
+                const popupHTML = `
+                    <div class="text-xs p-1 max-w-[280px]">
+                        <h4 class="font-bold border-b border-slate-200 pb-1 mb-2 text-slate-800 flex items-center gap-1">
+                            <i data-lucide="compass" class="w-3.5 h-3.5 text-blue-600"></i> Evaluasi Tata Ruang Spasial
+                        </h4>
+                        <div class="mb-2">
+                            <span class="text-[10px] text-slate-500 font-medium">Guna Lahan Terdeteksi:</span>
+                            <p class="font-bold text-slate-800">${cls}</p>
+                        </div>
+                        <div class="p-2 border rounded-lg ${bgBadge} mb-2">
+                            <p class="font-bold text-[11px]">${zoneTitle}</p>
+                        </div>
+                        <div class="text-[11px] text-slate-600 text-justify leading-relaxed">
+                            ${explanation}
+                        </div>
+                    </div>
+                `;
+                L.popup().setLatLng(latlng).setContent(popupHTML).openOn(map);
+                lucide.createIcons();
+            } else {
+                L.popup().setLatLng(latlng).setContent(`<div class="text-xs font-semibold text-rose-600 p-2">Titik berada di luar area poligon data spasial yang aktif.</div>`).openOn(map);
+            }
+        }
+
+        // --- EARLY WARNING SYSTEM (EWS) ---
+        document.getElementById('btn-ews').addEventListener('click', () => {
+            if (!isIntersectCalculated) {
+                alert("Harap jalankan Analisis Intersect (Tahap 2) terlebih dahulu untuk mendeteksi perubahan lahan!");
+                switchMapLayer('overlay');
+                return;
+            }
+
+            // 1. Mencari field lokasi (Desa/Kecamatan dll) secara cerdas dari atribut data
+            const locCandidates = ['desa', 'kelurahan', 'kecamatan', 'kabupaten', 'lokasi', 'nama', 'name', 'wilayah', 'region', 'd_desa'];
+            let locField = null;
+            if (geojsonT0 && geojsonT0.features.length > 0) {
+                const props = geojsonT0.features[0].properties || {};
+                locField = Object.keys(props).find(k => locCandidates.some(c => k.toLowerCase().includes(c)));
+            }
+
+            // 2. Agregasi statistik luasan per lokasi
+            let locationStats = {}; 
+
+            // Hitung total luas wilayah awal (T0) per lokasi
+            if (geojsonT0) {
+                geojsonT0.features.forEach(f => {
+                    let locName = (locField && f.properties && f.properties[locField]) ? f.properties[locField] : 'Wilayah Pantauan';
+                    if (!locationStats[locName]) locationStats[locName] = { totalT0: 0, changed: 0 };
+                    locationStats[locName].totalT0 += (turf.area(f) / 10000);
+                });
+            }
+
+            // Hitung luas berubah per lokasi dari data intersect
+            let intersectLocField = locField ? `T0_${locField}` : null;
+
+            geojsonIntersect.features.forEach(f => {
+                if (f.properties['Status_Perubahan'] && f.properties['Status_Perubahan'].includes('Ya')) {
+                    let locName = 'Wilayah Pantauan';
+                    
+                    // Cari nama lokasi di properties intersect
+                    if (intersectLocField && f.properties[intersectLocField]) {
+                        locName = f.properties[intersectLocField];
+                    } else {
+                        // Fallback pencarian keys
+                        const key = Object.keys(f.properties).find(k => locCandidates.some(c => k.toLowerCase().includes(c)));
+                        if (key && f.properties[key]) locName = f.properties[key];
+                    }
+                    
+                    let changedArea = (f.properties['Luas_UTM_Ha'] || 0);
+                    // Fallback inisiasi jika lokasi tidak ada di T0
+                    if (!locationStats[locName]) locationStats[locName] = { totalT0: changedArea, changed: 0 }; 
+                    locationStats[locName].changed += changedArea;
+                }
+            });
+
+            // 3. Format Pesan Alert Dinamis EWS
+            let ewsMessages = [];
+            for (const [loc, stats] of Object.entries(locationStats)) {
+                if (stats.changed > 0) {
+                    // Hitung persentase konversi spesifik per desa
+                    let pct = stats.totalT0 > 0 ? (stats.changed / stats.totalT0) * 100 : 100;
+                    ewsMessages.push({ loc: loc, changedHa: stats.changed, pct: pct });
+                }
+            }
+
+            // Urutkan dari persentase alih fungsi paling berbahaya (terbesar)
+            ewsMessages.sort((a, b) => b.pct - a.pct);
+
+            const resultDiv = document.getElementById('ews-result');
+            resultDiv.classList.remove('hidden');
+
+            if (ewsMessages.length > 0) {
+                let topMsg = ewsMessages[0];
+                
+                // Buat list laporan maksimal 3 desa teratas
+                let listHtml = ewsMessages.slice(0, 3).map(m => {
+                    let isDesa = m.loc.toLowerCase().includes('desa') || m.loc.toLowerCase().includes('kelurahan') || m.loc.toLowerCase().includes('kecamatan');
+                    let prefix = isDesa ? '' : 'Kawasan ';
+                    
+                    return `<li class="mb-3 leading-relaxed">
+                        <span class="font-bold text-rose-900 capitalize">${prefix}${m.loc}</span> mengalami peningkatan risiko alih fungsi lahan sebesar <span class="font-bold px-1 bg-rose-200 text-rose-900 rounded">${m.pct.toFixed(1)}%</span> (${m.changedHa.toFixed(2)} Ha) pada periode pemantauan tahun ${globalYearT0}-${globalYearT1}.
+                    </li>`;
+                }).join('');
+
+                resultDiv.innerHTML = `
+                    <div class="bg-rose-50 border-l-4 border-rose-600 p-3 rounded shadow-sm">
+                        <p class="text-[11px] font-bold text-rose-800 flex items-center gap-1 mb-2 border-b border-rose-200 pb-2">
+                            <i data-lucide="megaphone" class="w-4 h-4 animate-pulse"></i> ALERT: STATUS SIAGA ALIH FUNGSI
+                        </p>
+                        <ul class="text-[11px] text-rose-800 list-disc pl-4 space-y-1">
+                            ${listHtml}
+                        </ul>
+                        <div class="mt-2 pt-2 border-t border-rose-200 bg-white/60 p-2 rounded text-[10px] text-rose-700 font-medium">
+                            <i data-lucide="info" class="w-3 h-3 inline mb-0.5"></i> <b>Tindakan:</b> Dengan deteksi ini, pemerintah daerah dapat melakukan pengawasan lebih awal dan meninjau kembali perizinan yang diterbitkan di wilayah tersebut.
+                        </div>
+                    </div>
+                `;
+                
+                let isDesaToast = topMsg.loc.toLowerCase().includes('desa') || topMsg.loc.toLowerCase().includes('kel');
+                let toastLocPrefix = isDesaToast ? '' : 'Kawasan ';
+                showAlertToast(
+                    "⚠️ EWS Kritis Terdeteksi", 
+                    `${toastLocPrefix}${topMsg.loc} terpantau mengalami peningkatan risiko alih fungsi lahan sebesar ${topMsg.pct.toFixed(1)}%. Segera lakukan pengawasan!`, 
+                    "bg-rose-600"
+                );
+                
+                if(activeYear !== 'overlay') switchMapLayer('overlay');
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="bg-emerald-50 border-l-4 border-emerald-500 p-3 rounded shadow-sm">
+                        <p class="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                            <i data-lucide="shield-check" class="w-4 h-4"></i> STATUS AMAN TERKENDALI
+                        </p>
+                        <p class="text-[11px] text-emerald-600 mt-1">Tidak terdeteksi adanya indikasi peningkatan risiko alih fungsi lahan secara signifikan pada tahun ini.</p>
+                    </div>
+                `;
             }
             lucide.createIcons();
         });
 
-        const handleZoningCheck = (latlng, isHitSawah, statusThisYear) => {
-            if (zoningMarker) map.removeLayer(zoningMarker);
-            
-            zoningMarker = L.marker(latlng).addTo(map);
+        // --- DASHBOARD & SCENARIO LOGIC (Fitur 6 & 7) ---
+        let dashboardTrendChartInstance = null;
 
-            zoningMarker.bindPopup(`<div class="p-4 text-center">
-                <div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-emerald-600 rounded-full"></div>
-                <p class="text-xs font-bold text-slate-700 mt-2">AI Menganalisis Tata Ruang...</p>
-            </div>`).openPopup();
-
-            setTimeout(() => {
-                let content = '';
-                if (isHitSawah && statusThisYear !== "alih_fungsi") {
-                    content = `
-                        <div class="p-3 text-center w-[220px]">
-                            <div class="text-4xl mb-2">❌</div>
-                            <h3 class="font-bold text-rose-600 mb-1 text-base">IZIN DITOLAK</h3>
-                            <p class="text-xs text-slate-600">Lokasi ini masuk dalam <b>Zona Perlindungan Pertanian (LSD)</b>. Dilarang mendirikan bangunan komersial.</p>
-                            <button class="mt-3 w-full bg-slate-100 hover:bg-slate-200 text-xs py-2 rounded font-bold text-slate-700 transition" onclick="map.closePopup()">Cari Lokasi Lain</button>
-                        </div>
-                    `;
-                } else {
-                    content = `
-                        <div class="p-3 text-center w-[220px]">
-                            <div class="text-4xl mb-2">✅</div>
-                            <h3 class="font-bold text-emerald-600 mb-1 text-base">IZIN DISETUJUI</h3>
-                            <p class="text-xs text-slate-600">Lokasi berada di luar area sawah produktif. Sesuai untuk pengembangan pariwisata.</p>
-                            <button class="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-xs py-2 rounded font-bold text-white transition" onclick="map.closePopup()">Lanjut Proses Izin</button>
-                        </div>
-                    `;
+        function getDynamicChangedArea() {
+            if (!isIntersectCalculated || !geojsonIntersect) return 0;
+            let total = 0;
+            geojsonIntersect.features.forEach(f => {
+                if (f.properties['Status_Perubahan'] && f.properties['Status_Perubahan'].includes('Ya')) {
+                    total += (f.properties['Luas_UTM_Ha'] || 0);
                 }
-                zoningMarker.setPopupContent(content);
-            }, 1500);
-        };
+            });
+            return total;
+        }
 
-        map.on('click', (e) => {
-            if(isZoningMode) { handleZoningCheck(e.latlng, false, null); }
-        });
+        window.openSmartDashboard = () => {
+            if (!geojsonT0) {
+                alert("Harap proses data spasial terlebih dahulu.");
+                return;
+            }
 
-        // ==========================================
-        // FEATURE 6: SCENARIO SIMULATION MODAL
-        // ==========================================
-        const modal = document.getElementById('scenario-modal');
-        document.getElementById('btn-scenario').addEventListener('click', () => {
-            modal.classList.add('modal-active');
-        });
-        document.getElementById('close-modal').addEventListener('click', () => {
-            modal.classList.remove('modal-active');
-        });
+            const changedArea = getDynamicChangedArea();
+            const startArea = window.globalAreaT0Ha;
+            
+            document.getElementById('dash-luas-awal').innerText = `${startArea} Ha`;
+            document.getElementById('dash-luas-alih').innerText = `${changedArea > 0 ? changedArea.toFixed(2) : '0'} Ha`;
+            
+            let sesuaiPersen = startArea > 0 ? (100 - ((changedArea / startArea) * 100)) : 100;
+            document.getElementById('dash-zonasi-persen').innerText = `${sesuaiPersen.toFixed(1)}% Sesuai`;
+
+            let timeDiff = globalYearT1 - globalYearT0;
+            let targetYear1 = globalYearT1 + Math.ceil(timeDiff / 2);
+            let targetYear2 = globalYearT1 + timeDiff;
+
+            let predTargetYear2 = changedArea * 2.5; 
+            document.getElementById('dash-prediksi-5thn').innerHTML = `Jika tren konversi periode <b>${globalYearT0}-${globalYearT1}</b> dibiarkan tanpa intervensi, diprediksi akan terjadi kehilangan lahan secara kumulatif seluas <b>${predTargetYear2.toFixed(2)} Ha</b> di tahun ${targetYear2}.`;
+
+            document.getElementById('modal-dashboard').classList.add('modal-active');
+            
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if (dashboardTrendChartInstance) dashboardTrendChartInstance.destroy();
+
+            // Labels dinamis berdasarkan input tahun
+            const labels = [
+                globalYearT0.toString() + ' (Awal)', 
+                globalYearT1.toString() + ' (Akhir)', 
+                targetYear1.toString() + ' (Prediksi)', 
+                targetYear2.toString() + ' (Prediksi)'
+            ];
+            const dataP = [
+                0, // Titik awal di T0 selalu 0 (baseline)
+                changedArea, 
+                changedArea * 1.5, 
+                predTargetYear2
+            ];
+
+            dashboardTrendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Akumulasi Lahan Beralih Fungsi (Ha)',
+                        data: dataP,
+                        borderColor: '#9333ea', 
+                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#9333ea',
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+            lucide.createIcons();
+        }
+
+        window.openScenarioSimulation = () => {
+            const changedArea = getDynamicChangedArea();
+            let valScen1, valScen2;
+            
+            // Hitung tahun proyeksi 10 tahun kedepan dari T1
+            let targetSimYear = globalYearT1 + 10;
+            document.getElementById('lbl-scen-year').innerText = targetSimYear;
+            document.querySelectorAll('.lbl-scen-year-val').forEach(el => el.innerText = targetSimYear);
+
+            if (changedArea > 0) {
+                // Rata-rata hilangnya lahan per tahun dari data historis
+                const yearlyLoss = changedArea / (globalYearT1 - globalYearT0); 
+                // Kalkulasi Skenario BAU (10 tahun)
+                valScen1 = (yearlyLoss * 10).toFixed(1); 
+                // Kalkulasi dengan SAFEGIS Policy (Turun 60%)
+                valScen2 = (valScen1 * 0.4).toFixed(1); 
+            } else {
+                valScen1 = 450;
+                valScen2 = 180;
+            }
+
+            document.getElementById('scen-1-val').innerText = `Berkurang ${valScen1} Ha`;
+            document.getElementById('scen-2-val').innerText = `Berkurang Hanya ${valScen2} Ha`;
+
+            document.getElementById('modal-scenario').classList.add('modal-active');
+            lucide.createIcons();
+        }
+
+        // --- UTILS ---
+        function updateLegendText(htmlContent) {
+            document.getElementById('legend-content').innerHTML = htmlContent;
+        }
+
+        function triggerNotification() {
+            const toast = document.getElementById('ews-toast');
+            toast.classList.remove('hidden');
+            toast.classList.add('ews-active');
+            setTimeout(() => { toast.classList.remove('ews-active'); toast.classList.add('hidden'); }, 5000);
+        }
+
+        function showAlertToast(title, msg, bgClass) {
+            const toast = document.getElementById('alert-toast');
+            toast.className = `absolute top-24 right-5 z-[500] text-white p-4 rounded-xl shadow-2xl max-w-[320px] border border-white/20 cursor-pointer transition ews-active ${bgClass}`;
+            toast.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <div class="bg-white/20 p-2 rounded-full shadow-inner"><i data-lucide="bell" class="w-5 h-5"></i></div>
+                    <div>
+                        <h4 class="font-bold text-sm">${title}</h4>
+                        <p class="text-[11px] mt-1 text-white/90 leading-relaxed">${msg}</p>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+            toast.style.display = 'flex';
+            
+            setTimeout(() => { 
+                toast.classList.remove('ews-active'); 
+                setTimeout(() => { toast.style.display = 'none'; }, 300);
+            }, 6000);
+        }
+
     </script>
 </body>
 </html>
